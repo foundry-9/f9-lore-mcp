@@ -1,0 +1,29 @@
+{
+  "name": "f9-obsidian-mcp",
+  "version": "1.0.0",
+  "description": "An MCP that runs inside an Obsidian plugin",
+  "keywords": [
+    "obsidian",
+    "plugin",
+    "mcp"
+  ],
+  "license": "UNLICENSED",
+  "author": "Charles Sebold <charles@sebold.tech>",
+  "type": "commonjs",
+  "main": "main.js",
+  "scripts": {
+    "dev": "esbuild src/main.ts --bundle --outfile=main.js --external:obsidian --format=cjs --platform=node --sourcemap=inline --watch",
+    "build": "esbuild src/main.ts --bundle --minify --outfile=main.js --external:obsidian --format=cjs --platform=node",
+    "version": "node scripts/version-bump.mjs",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.12.7",
+    "esbuild": "^0.19.12",
+    "obsidian": "latest",
+    "typescript": "^5.4.5"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  }
+}

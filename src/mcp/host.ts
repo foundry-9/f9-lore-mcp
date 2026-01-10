@@ -4,6 +4,7 @@ import { createServer, IncomingMessage, ServerResponse } from "node:http";
 import { randomUUID } from "node:crypto";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import type { VectorIndexer } from "../vector/indexer";
 
 export interface McpConfig {
   enabled: boolean;
@@ -19,10 +20,12 @@ export class ObsidianMcpHost {
   private httpServer?: ReturnType<typeof createServer>;
   private transport?: StreamableHTTPServerTransport;
   private mcp?: McpServer;
+  private vectorIndexer?: VectorIndexer;
 
-  constructor(app: App, config: McpConfig) {
+  constructor(app: App, config: McpConfig, vectorIndexer?: VectorIndexer) {
     this.app = app;
     this.config = config;
+    this.vectorIndexer = vectorIndexer;
   }
 
   isRunning(): boolean {
@@ -361,6 +364,173 @@ export class ObsidianMcpHost {
         return {
           content: [{ type: "text", text: `Deleted folder: ${normalizedPath}` }],
         };
+      }
+    );
+
+    // Register vector search refresh tool (check for stale files)
+    mcp.registerTool(
+      "obsidian.refresh_index",
+      {
+        description: "Check for new or modified files and update the vector index (same as startup check)",
+        inputSchema: {},
+      },
+      async () => {
+        if (!this.vectorIndexer) {
+          return {
+            content: [{ type: "text", text: "Vector search is not configured" }],
+            isError: true,
+          };
+        }
+
+        try {
+          const available = await this.vectorIndexer.checkOllamaConnection();
+          if (!available) {
+            return {
+              content: [{ type: "text", text: "Cannot connect to Ollama. Is it running?" }],
+              isError: true,
+            };
+          }
+
+          const staleCount = await this.vectorIndexer.checkForStaleFiles();
+          if (staleCount === 0) {
+            return {
+              content: [{ type: "text", text: "Index is up to date. No files need reindexing." }],
+            };
+          }
+
+          return {
+            content: [
+              {
+                type: "text",
+                text: `Found ${staleCount} new or modified files. Reindexing in background.`,
+              },
+            ],
+          };
+        } catch (err) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: `Refresh failed: ${err instanceof Error ? err.message : String(err)}`,
+              },
+            ],
+            isError: true,
+          };
+        }
+      }
+    );
+
+    // Register vector search reindex tool
+    mcp.registerTool(
+      "obsidian.reindex_vault",
+      {
+        description: "Force re-embed all markdown files in the vault for vector search",
+        inputSchema: {},
+      },
+      async () => {
+        if (!this.vectorIndexer) {
+          return {
+            content: [{ type: "text", text: "Vector search is not configured" }],
+            isError: true,
+          };
+        }
+
+        try {
+          const available = await this.vectorIndexer.checkOllamaConnection();
+          if (!available) {
+            return {
+              content: [{ type: "text", text: "Cannot connect to Ollama. Is it running?" }],
+              isError: true,
+            };
+          }
+
+          const result = await this.vectorIndexer.reindexVault();
+          return {
+            content: [
+              {
+                type: "text",
+                text: `Reindexed ${result.indexed} files successfully.${
+                  result.errors.length > 0
+                    ? `\n\nErrors (${result.errors.length}):\n${result.errors.slice(0, 10).join("\n")}`
+                    : ""
+                }`,
+              },
+            ],
+          };
+        } catch (err) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: `Reindex failed: ${err instanceof Error ? err.message : String(err)}`,
+              },
+            ],
+            isError: true,
+          };
+        }
+      }
+    );
+
+    // Register vector search tool
+    mcp.registerTool(
+      "obsidian.search",
+      {
+        description: "Semantic vector search across vault notes using embeddings",
+        inputSchema: {
+          query: z.string().describe("Natural language search query").min(1),
+          limit: z
+            .number()
+            .optional()
+            .default(10)
+            .describe("Maximum number of results (default: 10)"),
+        },
+      },
+      async (args) => {
+        const { query, limit } = args;
+
+        if (!this.vectorIndexer) {
+          return {
+            content: [{ type: "text", text: "Vector search is not configured" }],
+            isError: true,
+          };
+        }
+
+        try {
+          const results = await this.vectorIndexer.search(query, limit);
+
+          if (results.length === 0) {
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: "No results found. The vault may need to be indexed first (use obsidian.reindex_vault).",
+                },
+              ],
+            };
+          }
+
+          // Format results
+          const formatted = results
+            .map(
+              (r, i) =>
+                `${i + 1}. **${r.chunk.filePath}** (score: ${r.score.toFixed(3)})\n   > ${r.chunk.preview}...`
+            )
+            .join("\n\n");
+
+          return {
+            content: [{ type: "text", text: formatted }],
+          };
+        } catch (err) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: `Search failed: ${err instanceof Error ? err.message : String(err)}`,
+              },
+            ],
+            isError: true,
+          };
+        }
       }
     );
 

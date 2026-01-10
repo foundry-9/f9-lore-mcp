@@ -1,11 +1,14 @@
-import { App, Notice, Plugin, PluginSettingTab, Setting } from "obsidian";
+import { App, Notice, Plugin, PluginSettingTab, Setting, TFile } from "obsidian";
 import { ObsidianMcpHost, McpConfig } from "./mcp/host";
+import { VectorIndexer } from "./vector/indexer";
+import { VectorSearchSettings, DEFAULT_VECTOR_SETTINGS } from "./vector/types";
 
 interface F9ObsidianMCPSettings {
   sampleSetting: boolean;
   mcpEnabled: boolean;
   mcpPort: number;
   mcpDnsRebindingProtection: boolean;
+  vectorSearch: VectorSearchSettings;
 }
 
 const DEFAULT_SETTINGS: F9ObsidianMCPSettings = {
@@ -13,15 +16,65 @@ const DEFAULT_SETTINGS: F9ObsidianMCPSettings = {
   mcpEnabled: false,
   mcpPort: 3030,
   mcpDnsRebindingProtection: true,
+  vectorSearch: DEFAULT_VECTOR_SETTINGS,
 };
 
 export default class F9ObsidianMCPPlugin extends Plugin {
-  settings: F9ObsidianMCPSettings;
+  settings!: F9ObsidianMCPSettings;
   private mcpHost?: ObsidianMcpHost;
+  vectorIndexer?: VectorIndexer;
 
   async onload() {
     console.log("Loading plugin: F9 Obsidian MCP");
     await this.loadSettings();
+
+    // Initialize vector indexer
+    this.vectorIndexer = new VectorIndexer(
+      this.app,
+      this,
+      this.settings.vectorSearch
+    );
+    await this.vectorIndexer.loadIndex();
+
+    // Register vault event handlers for auto-indexing
+    if (this.settings.vectorSearch.autoIndex) {
+      this.registerEvent(
+        this.app.vault.on("create", (file) => {
+          if (file instanceof TFile && file.extension === "md") {
+            this.vectorIndexer?.queueFileForIndexing(file.path);
+          }
+        })
+      );
+
+      this.registerEvent(
+        this.app.vault.on("modify", (file) => {
+          if (file instanceof TFile && file.extension === "md") {
+            this.vectorIndexer?.queueFileForIndexing(file.path);
+          }
+        })
+      );
+
+      this.registerEvent(
+        this.app.vault.on("delete", (file) => {
+          if (file instanceof TFile) {
+            this.vectorIndexer?.handleFileDelete(file.path);
+          }
+        })
+      );
+
+      this.registerEvent(
+        this.app.vault.on("rename", (file, oldPath) => {
+          if (file instanceof TFile) {
+            this.vectorIndexer?.handleFileRename(oldPath, file.path);
+          }
+        })
+      );
+
+      // Check for stale files on startup (after a brief delay)
+      setTimeout(() => {
+        this.vectorIndexer?.checkForStaleFiles();
+      }, 2000);
+    }
 
     const ribbon = this.addRibbonIcon(
       "dice",
@@ -71,7 +124,7 @@ export default class F9ObsidianMCPPlugin extends Plugin {
       enableDnsRebindingProtection: this.settings.mcpDnsRebindingProtection,
     };
 
-    this.mcpHost ??= new ObsidianMcpHost(this.app, cfg);
+    this.mcpHost ??= new ObsidianMcpHost(this.app, cfg, this.vectorIndexer);
 
     // Restart with latest config
     if (cfg.enabled) {
@@ -152,5 +205,93 @@ class F9ObsidianMCPSettingTab extends PluginSettingTab {
             await this.plugin.saveSettings();
           })
       );
+
+    // Vector Search Settings
+    containerEl.createEl("h3", { text: "Vector Search" });
+
+    new Setting(containerEl)
+      .setName("Enable auto-indexing")
+      .setDesc("Automatically embed files when they change")
+      .addToggle((toggle) =>
+        toggle
+          .setValue(this.plugin.settings.vectorSearch.autoIndex)
+          .onChange(async (value) => {
+            this.plugin.settings.vectorSearch.autoIndex = value;
+            await this.plugin.saveSettings();
+          })
+      );
+
+    new Setting(containerEl)
+      .setName("Ollama URL")
+      .setDesc("URL of your Ollama instance")
+      .addText((text) =>
+        text
+          .setPlaceholder("http://localhost:11434")
+          .setValue(this.plugin.settings.vectorSearch.ollamaUrl)
+          .onChange(async (value) => {
+            this.plugin.settings.vectorSearch.ollamaUrl = value;
+            this.plugin.vectorIndexer?.updateSettings(this.plugin.settings.vectorSearch);
+            await this.plugin.saveSettings();
+          })
+      );
+
+    new Setting(containerEl)
+      .setName("Embedding model")
+      .setDesc("Ollama model for generating embeddings")
+      .addText((text) =>
+        text
+          .setPlaceholder("nomic-embed-text:latest")
+          .setValue(this.plugin.settings.vectorSearch.embeddingModel)
+          .onChange(async (value) => {
+            this.plugin.settings.vectorSearch.embeddingModel = value;
+            this.plugin.vectorIndexer?.updateSettings(this.plugin.settings.vectorSearch);
+            await this.plugin.saveSettings();
+          })
+      );
+
+    new Setting(containerEl)
+      .setName("Reindex vault")
+      .setDesc("Force re-embed all markdown files")
+      .addButton((btn) =>
+        btn.setButtonText("Reindex Now").onClick(async () => {
+          const indexer = this.plugin.vectorIndexer;
+          if (!indexer) {
+            new Notice("Vector indexer not initialized");
+            return;
+          }
+
+          const available = await indexer.checkOllamaConnection();
+          if (!available) {
+            new Notice("Cannot connect to Ollama. Is it running?");
+            return;
+          }
+
+          new Notice("Starting vault reindex...");
+          const result = await indexer.reindexVault((file, current, total) => {
+            if (current % 10 === 0 || current === total) {
+              console.log(`F9 MCP: Indexing ${current}/${total}: ${file}`);
+            }
+          });
+
+          if (result.errors.length > 0) {
+            new Notice(
+              `Indexed ${result.indexed} files with ${result.errors.length} errors. Check console for details.`
+            );
+            console.error("F9 MCP: Indexing errors:", result.errors);
+          } else {
+            new Notice(`Successfully indexed ${result.indexed} files`);
+          }
+        })
+      );
+
+    // Show index stats
+    const stats = this.plugin.vectorIndexer?.getStats();
+    if (stats) {
+      new Setting(containerEl)
+        .setName("Index status")
+        .setDesc(
+          `${stats.fileCount} files, ${stats.chunkCount} chunks indexed using ${stats.model}`
+        );
+    }
   }
 }

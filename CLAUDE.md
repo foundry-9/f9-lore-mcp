@@ -43,7 +43,34 @@ No test framework is configured yet.
   - `/mcp` - MCP protocol endpoint
   - `/health` - Health check
 - Tools are registered via `McpServer.registerTool()` with Zod schemas for validation
-- Current tools: `obsidian.ping`, `obsidian.create_note`, `obsidian.delete_note`
+- Current tools:
+  - `obsidian.ping` - Simple ping/pong health check
+  - `obsidian.list_folders` - List folders in the vault
+  - `obsidian.list_notes` - List notes in the vault
+  - `obsidian.create_note` - Create a note
+  - `obsidian.read_note` - Read note contents
+  - `obsidian.update_note` - Update note contents
+  - `obsidian.delete_note` - Delete a note (moves to trash)
+  - `obsidian.move_or_rename_note` - Move or rename a note
+  - `obsidian.create_folder` - Create a folder
+  - `obsidian.delete_folder` - Delete a folder (moves to trash)
+  - `obsidian.search` - Semantic vector search across vault notes
+  - `obsidian.reindex_vault` - Force re-embed all files for vector search
+  - `obsidian.refresh_index` - Check for stale files and reindex them
+
+### Vector Search (`src/vector/`)
+
+- `VectorIndexer` orchestrates embedding and search using local Ollama
+- Automatic indexing on file create/modify/delete/rename events
+- Fixed-size chunking (~500 tokens) with overlap
+- Staleness detection on startup compares file mtime against stored `embeddedAt`
+- Embeddings stored in plugin's `data.json` via `saveData()`
+- Key files:
+  - `types.ts` - Interfaces for ChunkEmbedding, EmbeddingIndex, VectorSearchSettings
+  - `chunker.ts` - Paragraph-aware markdown chunking
+  - `ollama.ts` - Ollama API client for embeddings
+  - `similarity.ts` - Cosine similarity and topK search
+  - `indexer.ts` - Main orchestrator class
 
 ### Build System
 

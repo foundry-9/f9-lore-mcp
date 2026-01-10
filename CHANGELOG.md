@@ -4,6 +4,20 @@
 
 ### Added
 
+- **Granular markdown editing tools** for token-efficient note editing
+  - `obsidian.get_note_structure` - Get structural overview (headings, sections, list items, frontmatter) with freshness token
+  - `obsidian.read_section` - Read specific section content by ID
+  - `obsidian.read_heading_content` - Read all content under a heading
+  - `obsidian.read_frontmatter` - Read frontmatter as structured JSON
+  - `obsidian.update_section` - Update a section's content
+  - `obsidian.delete_section` - Delete a section from a note
+  - `obsidian.update_heading_content` - Update content under a heading (with subheading preservation option)
+  - `obsidian.rename_heading` - Rename a heading (change text and/or level)
+  - `obsidian.update_list_item` - Update list item text and/or task status
+  - `obsidian.update_frontmatter` - Update frontmatter properties (merge or replace)
+  - `obsidian.insert_content` - Insert content at specific positions (after/before section, under heading, at line, at start/end)
+  - Freshness tokens for staleness detection to prevent conflicting edits
+  - Post-write verification to confirm changes were applied correctly
 - **Vector search with local Ollama embeddings**
   - Automatic embedding of markdown files on create/modify/delete/rename events
   - Fixed-size chunking (~500 tokens) with overlap for better search granularity

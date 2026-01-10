@@ -5,6 +5,28 @@ import { randomUUID } from "node:crypto";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import type { VectorIndexer } from "../vector/indexer";
+import {
+  buildNoteStructure,
+  createFreshnessToken,
+  verifyFreshness,
+  extractSectionContent,
+  extractHeadingContent,
+  generateSectionId,
+  generateHeadingId,
+  generateListItemId,
+  type NoteStructure,
+} from "./structure";
+import {
+  updateSectionContent,
+  deleteSection,
+  updateHeadingContent,
+  renameHeading,
+  updateListItemText,
+  updateListItemTask,
+  updateFrontmatter,
+  insertContent,
+  type InsertPosition,
+} from "./editors";
 
 export interface McpConfig {
   enabled: boolean;
@@ -26,6 +48,90 @@ export class ObsidianMcpHost {
     this.app = app;
     this.config = config;
     this.vectorIndexer = vectorIndexer;
+  }
+
+  /**
+   * Wait for the metadata cache to update after a file modification.
+   */
+  private waitForCacheUpdate(file: TFile, timeout = 500): Promise<void> {
+    return new Promise((resolve) => {
+      const timer = setTimeout(resolve, timeout);
+      const ref = this.app.metadataCache.on("changed", (changedFile) => {
+        if (changedFile.path === file.path) {
+          clearTimeout(timer);
+          this.app.metadataCache.offref(ref);
+          resolve();
+        }
+      });
+    });
+  }
+
+  /**
+   * Perform an edit operation with freshness verification and optional post-write verification.
+   */
+  private async performEdit(
+    file: TFile,
+    freshnessToken: string,
+    editFn: (content: string, cache: import("obsidian").CachedMetadata) => string | null,
+    verify: boolean
+  ): Promise<{
+    success: boolean;
+    freshnessToken?: string;
+    verified?: boolean;
+    error?: string;
+    errorCode?: string;
+    currentToken?: string;
+  }> {
+    // Read current content
+    const content = await this.app.vault.read(file);
+    const cache = this.app.metadataCache.getFileCache(file);
+
+    if (!cache) {
+      return {
+        success: false,
+        error: "Metadata cache not available",
+        errorCode: "NO_CACHE",
+      };
+    }
+
+    // Verify freshness
+    if (!verifyFreshness(freshnessToken, content, file.stat.mtime)) {
+      const currentToken = createFreshnessToken(content, file.stat.mtime);
+      return {
+        success: false,
+        error: "File has changed since last read. Please re-read the file structure.",
+        errorCode: "STALE_TOKEN",
+        currentToken,
+      };
+    }
+
+    // Apply the edit
+    const newContent = editFn(content, cache);
+    if (newContent === null) {
+      return {
+        success: false,
+        error: "Edit operation failed - target not found",
+        errorCode: "TARGET_NOT_FOUND",
+      };
+    }
+
+    // Write the changes
+    await this.app.vault.modify(file, newContent);
+
+    // Wait for cache to update
+    if (verify) {
+      await this.waitForCacheUpdate(file);
+    }
+
+    // Generate new token
+    const updatedContent = await this.app.vault.read(file);
+    const newToken = createFreshnessToken(updatedContent, file.stat.mtime);
+
+    return {
+      success: true,
+      freshnessToken: newToken,
+      verified: verify,
+    };
   }
 
   isRunning(): boolean {
@@ -363,6 +469,848 @@ export class ObsidianMcpHost {
         await this.app.vault.trash(folder, true);
         return {
           content: [{ type: "text", text: `Deleted folder: ${normalizedPath}` }],
+        };
+      }
+    );
+
+    // ========================================================================
+    // Granular Structure Tools
+    // ========================================================================
+
+    // Register get note structure tool
+    mcp.registerTool(
+      "obsidian.get_note_structure",
+      {
+        description:
+          "Get the structural overview of a note (headings, sections, list items, frontmatter) with a freshness token for subsequent edits. Returns metadata without full content for token efficiency.",
+        inputSchema: {
+          path: z
+            .string()
+            .describe("Vault-relative path, e.g. 'Folder/Note.md'")
+            .min(1),
+          include_content: z
+            .boolean()
+            .optional()
+            .default(false)
+            .describe("If true, includes full content for sections instead of previews"),
+        },
+      },
+      async (args) => {
+        const { path, include_content } = args;
+        const normalizedPath = path.replace(/^\/+/, "");
+        const file = this.app.vault.getFileByPath(normalizedPath);
+        if (!file) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify({ error: "FILE_NOT_FOUND", message: `Note not found: ${normalizedPath}` }),
+              },
+            ],
+            isError: true,
+          };
+        }
+
+        const noteContent = await this.app.vault.read(file);
+        const cache = this.app.metadataCache.getFileCache(file);
+        const structure = buildNoteStructure(normalizedPath, noteContent, cache, file.stat.mtime);
+
+        // If include_content is true, replace previews with full content
+        if (include_content && cache?.sections) {
+          for (const section of structure.sections) {
+            const extracted = extractSectionContent(noteContent, section.id, cache);
+            if (extracted) {
+              (section as { preview: string }).preview = extracted.content;
+            }
+          }
+        }
+
+        return {
+          content: [{ type: "text", text: JSON.stringify(structure, null, 2) }],
+        };
+      }
+    );
+
+    // Register read section tool
+    mcp.registerTool(
+      "obsidian.read_section",
+      {
+        description: "Read the full content of a specific section by ID (from get_note_structure)",
+        inputSchema: {
+          path: z.string().describe("Vault-relative path").min(1),
+          section_id: z.string().describe("Section ID from get_note_structure, e.g. 's-paragraph-15'").min(1),
+          freshnessToken: z
+            .string()
+            .optional()
+            .describe("Token from get_note_structure to verify file hasn't changed"),
+        },
+      },
+      async (args) => {
+        const { path, section_id, freshnessToken } = args;
+        const normalizedPath = path.replace(/^\/+/, "");
+        const file = this.app.vault.getFileByPath(normalizedPath);
+        if (!file) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify({ error: "FILE_NOT_FOUND", message: `Note not found: ${normalizedPath}` }),
+              },
+            ],
+            isError: true,
+          };
+        }
+
+        const noteContent = await this.app.vault.read(file);
+        const cache = this.app.metadataCache.getFileCache(file);
+
+        // Check freshness if token provided
+        let stale = false;
+        if (freshnessToken) {
+          stale = !verifyFreshness(freshnessToken, noteContent, file.stat.mtime);
+        }
+
+        if (!cache) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify({ error: "NO_CACHE", message: "Metadata cache not available for this file" }),
+              },
+            ],
+            isError: true,
+          };
+        }
+
+        const extracted = extractSectionContent(noteContent, section_id, cache);
+        if (!extracted) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify({ error: "SECTION_NOT_FOUND", message: `Section not found: ${section_id}` }),
+              },
+            ],
+            isError: true,
+          };
+        }
+
+        const newToken = createFreshnessToken(noteContent, file.stat.mtime);
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify({
+                content: extracted.content,
+                freshnessToken: newToken,
+                stale,
+              }),
+            },
+          ],
+        };
+      }
+    );
+
+    // Register read heading content tool
+    mcp.registerTool(
+      "obsidian.read_heading_content",
+      {
+        description:
+          "Read all content under a heading (until the next heading of same or higher level)",
+        inputSchema: {
+          path: z.string().describe("Vault-relative path").min(1),
+          heading_id: z.string().describe("Heading ID from get_note_structure, e.g. 'h-2-42'").min(1),
+          freshnessToken: z
+            .string()
+            .optional()
+            .describe("Token from get_note_structure to verify file hasn't changed"),
+        },
+      },
+      async (args) => {
+        const { path, heading_id, freshnessToken } = args;
+        const normalizedPath = path.replace(/^\/+/, "");
+        const file = this.app.vault.getFileByPath(normalizedPath);
+        if (!file) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify({ error: "FILE_NOT_FOUND", message: `Note not found: ${normalizedPath}` }),
+              },
+            ],
+            isError: true,
+          };
+        }
+
+        const noteContent = await this.app.vault.read(file);
+        const cache = this.app.metadataCache.getFileCache(file);
+
+        let stale = false;
+        if (freshnessToken) {
+          stale = !verifyFreshness(freshnessToken, noteContent, file.stat.mtime);
+        }
+
+        if (!cache) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify({ error: "NO_CACHE", message: "Metadata cache not available" }),
+              },
+            ],
+            isError: true,
+          };
+        }
+
+        const extracted = extractHeadingContent(noteContent, heading_id, cache);
+        if (!extracted) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify({ error: "HEADING_NOT_FOUND", message: `Heading not found: ${heading_id}` }),
+              },
+            ],
+            isError: true,
+          };
+        }
+
+        const newToken = createFreshnessToken(noteContent, file.stat.mtime);
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify({
+                heading: extracted.heading.heading,
+                level: extracted.heading.level,
+                content: extracted.content,
+                freshnessToken: newToken,
+                stale,
+              }),
+            },
+          ],
+        };
+      }
+    );
+
+    // Register read frontmatter tool
+    mcp.registerTool(
+      "obsidian.read_frontmatter",
+      {
+        description: "Read frontmatter (YAML) from a note as structured JSON",
+        inputSchema: {
+          path: z.string().describe("Vault-relative path").min(1),
+          keys: z
+            .array(z.string())
+            .optional()
+            .describe("Specific keys to read. If omitted, reads all frontmatter."),
+        },
+      },
+      async (args) => {
+        const { path, keys } = args;
+        const normalizedPath = path.replace(/^\/+/, "");
+        const file = this.app.vault.getFileByPath(normalizedPath);
+        if (!file) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify({ error: "FILE_NOT_FOUND", message: `Note not found: ${normalizedPath}` }),
+              },
+            ],
+            isError: true,
+          };
+        }
+
+        const noteContent = await this.app.vault.read(file);
+        const cache = this.app.metadataCache.getFileCache(file);
+        const newToken = createFreshnessToken(noteContent, file.stat.mtime);
+
+        if (!cache?.frontmatter) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify({
+                  exists: false,
+                  data: {},
+                  freshnessToken: newToken,
+                }),
+              },
+            ],
+          };
+        }
+
+        // Filter out the internal 'position' key that Obsidian adds
+        const frontmatter = { ...cache.frontmatter };
+        delete (frontmatter as Record<string, unknown>).position;
+
+        let data: Record<string, unknown>;
+        if (keys && keys.length > 0) {
+          data = {};
+          for (const key of keys) {
+            if (key in frontmatter) {
+              data[key] = frontmatter[key];
+            }
+          }
+        } else {
+          data = frontmatter;
+        }
+
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify({
+                exists: true,
+                data,
+                freshnessToken: newToken,
+              }),
+            },
+          ],
+        };
+      }
+    );
+
+    // ========================================================================
+    // Granular Write Tools
+    // ========================================================================
+
+    // Register update section tool
+    mcp.registerTool(
+      "obsidian.update_section",
+      {
+        description: "Update the content of a specific section",
+        inputSchema: {
+          path: z.string().describe("Vault-relative path").min(1),
+          section_id: z.string().describe("Section ID from get_note_structure").min(1),
+          freshnessToken: z.string().describe("Token from last read to verify file hasn't changed").min(1),
+          content: z.string().describe("New content for the section"),
+          verify: z
+            .boolean()
+            .optional()
+            .default(true)
+            .describe("If true, verify the change was applied"),
+        },
+      },
+      async (args) => {
+        const { path, section_id, freshnessToken, content: newContent, verify } = args;
+        const normalizedPath = path.replace(/^\/+/, "");
+        const file = this.app.vault.getFileByPath(normalizedPath);
+        if (!file) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify({ error: "FILE_NOT_FOUND", message: `Note not found: ${normalizedPath}` }),
+              },
+            ],
+            isError: true,
+          };
+        }
+
+        const result = await this.performEdit(
+          file,
+          freshnessToken,
+          (c, cache) => updateSectionContent(c, cache, section_id, newContent),
+          verify
+        );
+
+        if (!result.success) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify({
+                  error: result.errorCode,
+                  message: result.error,
+                  currentToken: result.currentToken,
+                }),
+              },
+            ],
+            isError: true,
+          };
+        }
+
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify({
+                success: true,
+                freshnessToken: result.freshnessToken,
+                verified: result.verified,
+              }),
+            },
+          ],
+        };
+      }
+    );
+
+    // Register delete section tool
+    mcp.registerTool(
+      "obsidian.delete_section",
+      {
+        description: "Delete a section from a note",
+        inputSchema: {
+          path: z.string().describe("Vault-relative path").min(1),
+          section_id: z.string().describe("Section ID from get_note_structure").min(1),
+          freshnessToken: z.string().describe("Token from last read").min(1),
+          verify: z.boolean().optional().default(true),
+        },
+      },
+      async (args) => {
+        const { path, section_id, freshnessToken, verify } = args;
+        const normalizedPath = path.replace(/^\/+/, "");
+        const file = this.app.vault.getFileByPath(normalizedPath);
+        if (!file) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify({ error: "FILE_NOT_FOUND", message: `Note not found: ${normalizedPath}` }),
+              },
+            ],
+            isError: true,
+          };
+        }
+
+        const result = await this.performEdit(
+          file,
+          freshnessToken,
+          (c, cache) => deleteSection(c, cache, section_id),
+          verify
+        );
+
+        if (!result.success) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify({
+                  error: result.errorCode,
+                  message: result.error,
+                  currentToken: result.currentToken,
+                }),
+              },
+            ],
+            isError: true,
+          };
+        }
+
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify({
+                success: true,
+                freshnessToken: result.freshnessToken,
+                verified: result.verified,
+              }),
+            },
+          ],
+        };
+      }
+    );
+
+    // Register update heading content tool
+    mcp.registerTool(
+      "obsidian.update_heading_content",
+      {
+        description: "Update all content under a heading (until next same/higher level heading)",
+        inputSchema: {
+          path: z.string().describe("Vault-relative path").min(1),
+          heading_id: z.string().describe("Heading ID from get_note_structure").min(1),
+          freshnessToken: z.string().describe("Token from last read").min(1),
+          content: z.string().describe("New content to place under the heading"),
+          preserve_subheadings: z
+            .boolean()
+            .optional()
+            .default(true)
+            .describe("If true, only replaces content before first subheading"),
+          verify: z.boolean().optional().default(true),
+        },
+      },
+      async (args) => {
+        const { path, heading_id, freshnessToken, content: newContent, preserve_subheadings, verify } = args;
+        const normalizedPath = path.replace(/^\/+/, "");
+        const file = this.app.vault.getFileByPath(normalizedPath);
+        if (!file) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify({ error: "FILE_NOT_FOUND", message: `Note not found: ${normalizedPath}` }),
+              },
+            ],
+            isError: true,
+          };
+        }
+
+        const result = await this.performEdit(
+          file,
+          freshnessToken,
+          (c, cache) => updateHeadingContent(c, cache, heading_id, newContent, preserve_subheadings),
+          verify
+        );
+
+        if (!result.success) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify({
+                  error: result.errorCode,
+                  message: result.error,
+                  currentToken: result.currentToken,
+                }),
+              },
+            ],
+            isError: true,
+          };
+        }
+
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify({
+                success: true,
+                freshnessToken: result.freshnessToken,
+                verified: result.verified,
+              }),
+            },
+          ],
+        };
+      }
+    );
+
+    // Register rename heading tool
+    mcp.registerTool(
+      "obsidian.rename_heading",
+      {
+        description: "Rename a heading (change text and/or level)",
+        inputSchema: {
+          path: z.string().describe("Vault-relative path").min(1),
+          heading_id: z.string().describe("Heading ID from get_note_structure").min(1),
+          freshnessToken: z.string().describe("Token from last read").min(1),
+          new_text: z.string().describe("New heading text"),
+          new_level: z
+            .number()
+            .min(1)
+            .max(6)
+            .optional()
+            .describe("New heading level (1-6). If omitted, keeps current level."),
+          verify: z.boolean().optional().default(true),
+        },
+      },
+      async (args) => {
+        const { path, heading_id, freshnessToken, new_text, new_level, verify } = args;
+        const normalizedPath = path.replace(/^\/+/, "");
+        const file = this.app.vault.getFileByPath(normalizedPath);
+        if (!file) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify({ error: "FILE_NOT_FOUND", message: `Note not found: ${normalizedPath}` }),
+              },
+            ],
+            isError: true,
+          };
+        }
+
+        const result = await this.performEdit(
+          file,
+          freshnessToken,
+          (c, cache) => renameHeading(c, cache, heading_id, new_text, new_level),
+          verify
+        );
+
+        if (!result.success) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify({
+                  error: result.errorCode,
+                  message: result.error,
+                  currentToken: result.currentToken,
+                }),
+              },
+            ],
+            isError: true,
+          };
+        }
+
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify({
+                success: true,
+                freshnessToken: result.freshnessToken,
+                verified: result.verified,
+              }),
+            },
+          ],
+        };
+      }
+    );
+
+    // Register update list item tool
+    mcp.registerTool(
+      "obsidian.update_list_item",
+      {
+        description: "Update a list item's text and/or task status",
+        inputSchema: {
+          path: z.string().describe("Vault-relative path").min(1),
+          list_item_id: z.string().describe("List item ID from get_note_structure").min(1),
+          freshnessToken: z.string().describe("Token from last read").min(1),
+          text: z.string().optional().describe("New text for the list item (excluding marker)"),
+          task_status: z
+            .string()
+            .optional()
+            .describe("Task status character: ' ' for incomplete, 'x' for complete, or other character"),
+          verify: z.boolean().optional().default(true),
+        },
+      },
+      async (args) => {
+        const { path, list_item_id, freshnessToken, text, task_status, verify } = args;
+        const normalizedPath = path.replace(/^\/+/, "");
+        const file = this.app.vault.getFileByPath(normalizedPath);
+        if (!file) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify({ error: "FILE_NOT_FOUND", message: `Note not found: ${normalizedPath}` }),
+              },
+            ],
+            isError: true,
+          };
+        }
+
+        // Apply text update if provided
+        let editResult = { success: true, freshnessToken, verified: false, error: undefined as string | undefined, errorCode: undefined as string | undefined, currentToken: undefined as string | undefined };
+
+        if (text !== undefined) {
+          editResult = await this.performEdit(
+            file,
+            editResult.freshnessToken!,
+            (c, cache) => updateListItemText(c, cache, list_item_id, text),
+            false // Don't verify intermediate step
+          );
+          if (!editResult.success) {
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: JSON.stringify({
+                    error: editResult.errorCode,
+                    message: editResult.error,
+                    currentToken: editResult.currentToken,
+                  }),
+                },
+              ],
+              isError: true,
+            };
+          }
+        }
+
+        // Apply task status update if provided
+        if (task_status !== undefined) {
+          editResult = await this.performEdit(
+            file,
+            editResult.freshnessToken!,
+            (c, cache) => updateListItemTask(c, cache, list_item_id, task_status),
+            verify
+          );
+          if (!editResult.success) {
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: JSON.stringify({
+                    error: editResult.errorCode,
+                    message: editResult.error,
+                    currentToken: editResult.currentToken,
+                  }),
+                },
+              ],
+              isError: true,
+            };
+          }
+        } else if (verify && text !== undefined) {
+          // If only text was updated, we need to verify now
+          await this.waitForCacheUpdate(file);
+          const updatedContent = await this.app.vault.read(file);
+          editResult.freshnessToken = createFreshnessToken(updatedContent, file.stat.mtime);
+          editResult.verified = true;
+        }
+
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify({
+                success: true,
+                freshnessToken: editResult.freshnessToken,
+                verified: editResult.verified,
+              }),
+            },
+          ],
+        };
+      }
+    );
+
+    // Register update frontmatter tool
+    mcp.registerTool(
+      "obsidian.update_frontmatter",
+      {
+        description: "Update frontmatter properties. Use null as a value to delete a key.",
+        inputSchema: {
+          path: z.string().describe("Vault-relative path").min(1),
+          freshnessToken: z.string().describe("Token from last read").min(1),
+          updates: z
+            .record(z.any())
+            .describe("Key-value pairs to set. Use null to delete a key."),
+          replace_all: z
+            .boolean()
+            .optional()
+            .default(false)
+            .describe("If true, replaces entire frontmatter instead of merging"),
+          verify: z.boolean().optional().default(true),
+        },
+      },
+      async (args) => {
+        const { path, freshnessToken, updates, replace_all, verify } = args;
+        const normalizedPath = path.replace(/^\/+/, "");
+        const file = this.app.vault.getFileByPath(normalizedPath);
+        if (!file) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify({ error: "FILE_NOT_FOUND", message: `Note not found: ${normalizedPath}` }),
+              },
+            ],
+            isError: true,
+          };
+        }
+
+        const result = await this.performEdit(
+          file,
+          freshnessToken,
+          (c, cache) => updateFrontmatter(c, cache, updates, replace_all),
+          verify
+        );
+
+        if (!result.success) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify({
+                  error: result.errorCode,
+                  message: result.error,
+                  currentToken: result.currentToken,
+                }),
+              },
+            ],
+            isError: true,
+          };
+        }
+
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify({
+                success: true,
+                freshnessToken: result.freshnessToken,
+                verified: result.verified,
+              }),
+            },
+          ],
+        };
+      }
+    );
+
+    // Register insert content tool
+    mcp.registerTool(
+      "obsidian.insert_content",
+      {
+        description: "Insert content at a specific position in a note",
+        inputSchema: {
+          path: z.string().describe("Vault-relative path").min(1),
+          freshnessToken: z.string().describe("Token from last read").min(1),
+          position: z
+            .union([
+              z.object({ after_section_id: z.string() }),
+              z.object({ before_section_id: z.string() }),
+              z.object({
+                under_heading_id: z.string(),
+                at: z.enum(["start", "end"]),
+              }),
+              z.object({ at_line: z.number() }),
+              z.object({ at: z.enum(["start", "end"]) }),
+            ])
+            .describe("Where to insert: after/before section, under heading, at line number, or at start/end of file"),
+          content: z.string().describe("Content to insert"),
+          verify: z.boolean().optional().default(true),
+        },
+      },
+      async (args) => {
+        const { path, freshnessToken, position, content: newContent, verify } = args;
+        const normalizedPath = path.replace(/^\/+/, "");
+        const file = this.app.vault.getFileByPath(normalizedPath);
+        if (!file) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify({ error: "FILE_NOT_FOUND", message: `Note not found: ${normalizedPath}` }),
+              },
+            ],
+            isError: true,
+          };
+        }
+
+        const result = await this.performEdit(
+          file,
+          freshnessToken,
+          (c, cache) => insertContent(c, cache, position as InsertPosition, newContent),
+          verify
+        );
+
+        if (!result.success) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify({
+                  error: result.errorCode,
+                  message: result.error,
+                  currentToken: result.currentToken,
+                }),
+              },
+            ],
+            isError: true,
+          };
+        }
+
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify({
+                success: true,
+                freshnessToken: result.freshnessToken,
+                verified: result.verified,
+              }),
+            },
+          ],
         };
       }
     );

@@ -44,19 +44,43 @@ No test framework is configured yet.
   - `/health` - Health check
 - Tools are registered via `McpServer.registerTool()` with Zod schemas for validation
 - Current tools:
-  - `obsidian.ping` - Simple ping/pong health check
-  - `obsidian.list_folders` - List folders in the vault
-  - `obsidian.list_notes` - List notes in the vault
-  - `obsidian.create_note` - Create a note
-  - `obsidian.read_note` - Read note contents
-  - `obsidian.update_note` - Update note contents
-  - `obsidian.delete_note` - Delete a note (moves to trash)
-  - `obsidian.move_or_rename_note` - Move or rename a note
-  - `obsidian.create_folder` - Create a folder
-  - `obsidian.delete_folder` - Delete a folder (moves to trash)
-  - `obsidian.search` - Semantic vector search across vault notes
-  - `obsidian.reindex_vault` - Force re-embed all files for vector search
-  - `obsidian.refresh_index` - Check for stale files and reindex them
+  - **Basic Operations**
+    - `obsidian.ping` - Simple ping/pong health check
+    - `obsidian.list_folders` - List folders in the vault
+    - `obsidian.list_notes` - List notes in the vault
+    - `obsidian.create_note` - Create a note
+    - `obsidian.read_note` - Read note contents
+    - `obsidian.update_note` - Update note contents (full file replacement)
+    - `obsidian.delete_note` - Delete a note (moves to trash)
+    - `obsidian.move_or_rename_note` - Move or rename a note
+    - `obsidian.create_folder` - Create a folder
+    - `obsidian.delete_folder` - Delete a folder (moves to trash)
+  - **Granular Structure Tools** (token-efficient editing)
+    - `obsidian.get_note_structure` - Get headings, sections, list items, frontmatter with freshness token
+    - `obsidian.read_section` - Read specific section content by ID
+    - `obsidian.read_heading_content` - Read content under a heading
+    - `obsidian.read_frontmatter` - Read frontmatter as JSON
+    - `obsidian.update_section` - Update section content
+    - `obsidian.delete_section` - Delete a section
+    - `obsidian.update_heading_content` - Update content under heading
+    - `obsidian.rename_heading` - Rename heading text/level
+    - `obsidian.update_list_item` - Update list item text/task status
+    - `obsidian.update_frontmatter` - Update frontmatter properties
+    - `obsidian.insert_content` - Insert at specific position
+  - **Vector Search**
+    - `obsidian.search` - Semantic vector search across vault notes
+    - `obsidian.reindex_vault` - Force re-embed all files for vector search
+    - `obsidian.refresh_index` - Check for stale files and reindex them
+
+### Granular Editing (`src/mcp/structure.ts`, `src/mcp/editors.ts`)
+
+- `structure.ts` - Types and utilities for note structure extraction
+  - Freshness tokens (mtime + content hash) for staleness detection
+  - `buildNoteStructure()` uses `app.metadataCache` to extract headings, sections, list items
+  - ID generation for sections (`s-type-line`), headings (`h-level-line`), list items (`li-line`)
+- `editors.ts` - Pure functions for content manipulation
+  - String-based editing using position offsets from metadata cache
+  - Functions: `updateSectionContent`, `deleteSection`, `updateHeadingContent`, `renameHeading`, `updateListItemText`, `updateListItemTask`, `updateFrontmatter`, `insertContent`
 
 ### Vector Search (`src/vector/`)
 

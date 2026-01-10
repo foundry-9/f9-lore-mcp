@@ -1,4 +1,4 @@
-import type { App } from "obsidian";
+import type { App, TFile, TFolder } from "obsidian";
 import { z } from "zod";
 import { createServer, IncomingMessage, ServerResponse } from "node:http";
 import { randomUUID } from "node:crypto";
@@ -43,6 +43,74 @@ export class ObsidianMcpHost {
       content: [{ type: "text", text: "pong from Obsidian" }],
     }));
 
+    // Register list folders tool
+    mcp.registerTool(
+      "obsidian.list_folders",
+      {
+        description: "List folders in the vault, optionally filtered by parent folder",
+        inputSchema: {
+          folder: z
+            .string()
+            .optional()
+            .describe("Vault-relative parent folder path. If omitted, lists all folders in the vault."),
+        },
+      },
+      async (args) => {
+        const { folder } = args;
+        const allFolders: string[] = [];
+        const root = this.app.vault.getRoot();
+        const collectFolders = (f: TFolder) => {
+          for (const child of f.children) {
+            if ("children" in child) {
+              allFolders.push(child.path);
+              collectFolders(child as TFolder);
+            }
+          }
+        };
+        collectFolders(root);
+        let folders: string[];
+        if (folder) {
+          const normalizedFolder = folder.replace(/^\/+/, "").replace(/\/+$/, "");
+          folders = allFolders.filter((f) => f.startsWith(normalizedFolder + "/"));
+        } else {
+          folders = allFolders;
+        }
+        folders.sort();
+        return {
+          content: [{ type: "text", text: folders.length > 0 ? folders.join("\n") : "(no folders found)" }],
+        };
+      }
+    );
+
+    // Register list notes tool
+    mcp.registerTool(
+      "obsidian.list_notes",
+      {
+        description: "List notes in the vault, optionally filtered by folder",
+        inputSchema: {
+          folder: z
+            .string()
+            .optional()
+            .describe("Vault-relative folder path to list notes from. If omitted, lists all notes in the vault."),
+        },
+      },
+      async (args) => {
+        const { folder } = args;
+        const allFiles = this.app.vault.getMarkdownFiles();
+        let files: TFile[];
+        if (folder) {
+          const normalizedFolder = folder.replace(/^\/+/, "").replace(/\/+$/, "");
+          files = allFiles.filter((f) => f.path.startsWith(normalizedFolder + "/"));
+        } else {
+          files = allFiles;
+        }
+        const paths = files.map((f) => f.path).sort();
+        return {
+          content: [{ type: "text", text: paths.length > 0 ? paths.join("\n") : "(no notes found)" }],
+        };
+      }
+    );
+
     // Register note creation tool
     mcp.registerTool(
       "obsidian.create_note",
@@ -80,6 +148,65 @@ export class ObsidianMcpHost {
       }
     );
 
+    // Register note reading tool
+    mcp.registerTool(
+      "obsidian.read_note",
+      {
+        description: "Read the contents of a note in the current vault",
+        inputSchema: {
+          path: z
+            .string()
+            .describe("Vault-relative path, e.g. 'Folder/Note.md'")
+            .min(1),
+        },
+      },
+      async (args) => {
+        const { path } = args;
+        const normalizedPath = path.replace(/^\/+/, "");
+        const file = this.app.vault.getFileByPath(normalizedPath);
+        if (!file) {
+          return {
+            content: [{ type: "text", text: `Note not found: ${normalizedPath}` }],
+            isError: true,
+          };
+        }
+        const noteContent = await this.app.vault.read(file);
+        return {
+          content: [{ type: "text", text: noteContent }],
+        };
+      }
+    );
+
+    // Register note update tool
+    mcp.registerTool(
+      "obsidian.update_note",
+      {
+        description: "Update the contents of an existing note in the current vault",
+        inputSchema: {
+          path: z
+            .string()
+            .describe("Vault-relative path, e.g. 'Folder/Note.md'")
+            .min(1),
+          content: z.string().describe("New contents for the note"),
+        },
+      },
+      async (args) => {
+        const { path, content } = args;
+        const normalizedPath = path.replace(/^\/+/, "");
+        const file = this.app.vault.getFileByPath(normalizedPath);
+        if (!file) {
+          return {
+            content: [{ type: "text", text: `Note not found: ${normalizedPath}` }],
+            isError: true,
+          };
+        }
+        await this.app.vault.modify(file, content);
+        return {
+          content: [{ type: "text", text: `Updated note: ${normalizedPath}` }],
+        };
+      }
+    );
+
     // Register note deletion tool
     mcp.registerTool(
       "obsidian.delete_note",
@@ -105,6 +232,134 @@ export class ObsidianMcpHost {
         await this.app.vault.trash(file, true);
         return {
           content: [{ type: "text", text: `Deleted note: ${normalizedPath}` }],
+        };
+      }
+    );
+
+    // Register note move/rename tool
+    mcp.registerTool(
+      "obsidian.move_or_rename_note",
+      {
+        description: "Move or rename a note in the current vault",
+        inputSchema: {
+          from: z
+            .string()
+            .describe("Current vault-relative path, e.g. 'Folder/Note.md'")
+            .min(1),
+          to: z
+            .string()
+            .describe("New vault-relative path, e.g. 'NewFolder/RenamedNote.md'")
+            .min(1),
+        },
+      },
+      async (args) => {
+        const { from, to } = args;
+        const normalizedFrom = from.replace(/^\/+/, "");
+        const normalizedTo = to.replace(/^\/+/, "");
+        const file = this.app.vault.getFileByPath(normalizedFrom);
+        if (!file) {
+          return {
+            content: [{ type: "text", text: `Note not found: ${normalizedFrom}` }],
+            isError: true,
+          };
+        }
+        // Create intermediate folders if needed
+        const folderPath = normalizedTo.split("/").slice(0, -1).join("/");
+        if (folderPath) {
+          try {
+            await this.app.vault.createFolder(folderPath);
+          } catch (_) {
+            // ignore if exists
+          }
+        }
+        await this.app.fileManager.renameFile(file, normalizedTo);
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Moved note from ${normalizedFrom} to ${normalizedTo}`,
+            },
+          ],
+        };
+      }
+    );
+
+    // Register folder creation tool
+    mcp.registerTool(
+      "obsidian.create_folder",
+      {
+        description: "Create a folder in the current vault (creates intermediate folders as needed)",
+        inputSchema: {
+          path: z
+            .string()
+            .describe("Vault-relative folder path, e.g. 'Parent/Child/NewFolder'")
+            .min(1),
+        },
+      },
+      async (args) => {
+        const { path } = args;
+        const normalizedPath = path.replace(/^\/+/, "").replace(/\/+$/, "");
+        const existing = this.app.vault.getAbstractFileByPath(normalizedPath);
+        if (existing) {
+          return {
+            content: [{ type: "text", text: `Folder already exists: ${normalizedPath}` }],
+          };
+        }
+        await this.app.vault.createFolder(normalizedPath);
+        return {
+          content: [{ type: "text", text: `Created folder: ${normalizedPath}` }],
+        };
+      }
+    );
+
+    // Register folder deletion tool
+    mcp.registerTool(
+      "obsidian.delete_folder",
+      {
+        description: "Delete a folder from the current vault (moves to system trash)",
+        inputSchema: {
+          path: z
+            .string()
+            .describe("Vault-relative folder path, e.g. 'Folder/Subfolder'")
+            .min(1),
+          delete_if_not_empty: z
+            .boolean()
+            .optional()
+            .default(false)
+            .describe("If true, delete folder even if it contains files. Defaults to false."),
+        },
+      },
+      async (args) => {
+        const { path, delete_if_not_empty } = args;
+        const normalizedPath = path.replace(/^\/+/, "").replace(/\/+$/, "");
+        const folder = this.app.vault.getAbstractFileByPath(normalizedPath);
+        if (!folder) {
+          return {
+            content: [{ type: "text", text: `Folder not found: ${normalizedPath}` }],
+            isError: true,
+          };
+        }
+        if (!("children" in folder)) {
+          return {
+            content: [{ type: "text", text: `Path is not a folder: ${normalizedPath}` }],
+            isError: true,
+          };
+        }
+        const typedFolder = folder as TFolder;
+        if (!delete_if_not_empty && typedFolder.children.length > 0) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: `Folder is not empty: ${normalizedPath} (contains ${typedFolder.children.length} items). Set delete_if_not_empty to true to delete anyway.`,
+              },
+            ],
+            isError: true,
+          };
+        }
+        await this.app.vault.trash(folder, true);
+        return {
+          content: [{ type: "text", text: `Deleted folder: ${normalizedPath}` }],
         };
       }
     );

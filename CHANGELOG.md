@@ -4,6 +4,14 @@
 
 ### Added
 
+- **Multi-session support** for concurrent MCP client connections
+  - Multiple clients (Claude Desktop, Claude.ai, mcp-remote, etc.) can now connect simultaneously
+  - Each client gets its own isolated MCP session with independent state
+  - Sessions are created on-demand when clients send initialize requests
+  - Session routing based on `mcp-session-id` header
+  - Health endpoint now reports active session count
+  - Sessions are properly cleaned up on client disconnect or server shutdown
+
 - **HTTPS support with mkcert certificates** for secure localhost connections
   - MCP server now uses HTTPS instead of HTTP
   - Compatible with Claude Desktop and other clients requiring trusted TLS
@@ -45,6 +53,9 @@
 
 ### Changed
 
+- Refactored MCP host architecture to support multiple concurrent sessions
+  - Each session now has its own McpServer and transport instance
+  - Tool registration extracted into reusable `registerTools()` method
 - Updated Zod from 3.23.8 to 4.3.5
 - Migrated from deprecated `McpServer.tool()` to `McpServer.registerTool()` API
 - Updated CLAUDE.md with complete list of current MCP tools

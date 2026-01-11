@@ -42,12 +42,17 @@ export interface McpConfig {
   };
 }
 
+interface McpSession {
+  mcp: McpServer;
+  transport: StreamableHTTPServerTransport;
+  createdAt: number;
+}
+
 export class ObsidianMcpHost {
   private app: App;
   private config: McpConfig;
   private httpServer?: Server;
-  private transport?: StreamableHTTPServerTransport;
-  private mcp?: McpServer;
+  private sessions: Map<string, McpSession> = new Map();
   private vectorIndexer?: VectorIndexer;
 
   constructor(app: App, config: McpConfig, vectorIndexer?: VectorIndexer) {
@@ -141,18 +146,13 @@ export class ObsidianMcpHost {
   }
 
   isRunning(): boolean {
-    return !!this.httpServer && !!this.mcp;
+    return !!this.httpServer;
   }
 
-  async start(): Promise<void> {
-    if (this.isRunning()) return;
-    if (!this.config.enabled) return;
-
-    const { port } = this.config;
-
-    // Prepare MCP server and tools
-    const mcp = new McpServer({ name: "F9 Obsidian MCP", version: "1.0.0" });
-
+  /**
+   * Register all MCP tools on a server instance.
+   */
+  private registerTools(mcp: McpServer): void {
     // Register simple ping tool
     mcp.registerTool("obsidian.ping", {}, async () => ({
       content: [{ type: "text", text: "pong from Obsidian" }],
@@ -1487,16 +1487,54 @@ export class ObsidianMcpHost {
         }
       }
     );
+  }
 
-    // Build transport and HTTP endpoint
+  /**
+   * Create a new MCP session with its own server and transport.
+   */
+  private async createSession(): Promise<{ sessionId: string; session: McpSession }> {
+    const mcp = new McpServer({ name: "F9 Obsidian MCP", version: "1.0.0" });
+    this.registerTools(mcp);
+
+    const sessionId = randomUUID();
     const transport = new StreamableHTTPServerTransport({
-      sessionIdGenerator: () => randomUUID(),
+      sessionIdGenerator: () => sessionId,
       allowedHosts: this.config.allowedHosts,
       allowedOrigins: this.config.allowedOrigins,
       enableDnsRebindingProtection: this.config.enableDnsRebindingProtection ?? false,
     });
 
     await mcp.connect(transport);
+
+    const session: McpSession = {
+      mcp,
+      transport,
+      createdAt: Date.now(),
+    };
+
+    this.sessions.set(sessionId, session);
+    console.log(`[F9 MCP] Created new session: ${sessionId} (total: ${this.sessions.size})`);
+
+    return { sessionId, session };
+  }
+
+  /**
+   * Close and remove a session.
+   */
+  private async closeSession(sessionId: string): Promise<void> {
+    const session = this.sessions.get(sessionId);
+    if (session) {
+      await session.mcp.close();
+      this.sessions.delete(sessionId);
+      console.log(`[F9 MCP] Closed session: ${sessionId} (remaining: ${this.sessions.size})`);
+    }
+  }
+
+  async start(): Promise<void> {
+    if (this.isRunning()) return;
+    if (!this.config.enabled) return;
+
+    const { port } = this.config;
 
     // Validate TLS configuration
     if (!this.config.tls) {
@@ -1522,15 +1560,36 @@ export class ObsidianMcpHost {
       try {
         const url = req.url || "/";
         if (url === "/mcp") {
-          await transport.handleRequest(req, res);
+          // Extract session ID from request headers
+          const sessionId = req.headers["mcp-session-id"] as string | undefined;
+
+          if (sessionId && this.sessions.has(sessionId)) {
+            // Route to existing session
+            const session = this.sessions.get(sessionId)!;
+            await session.transport.handleRequest(req, res);
+          } else if (req.method === "POST") {
+            // Create new session for POST without valid session ID
+            const { session } = await this.createSession();
+            await session.transport.handleRequest(req, res);
+          } else if (req.method === "DELETE" && sessionId) {
+            // Handle session termination
+            await this.closeSession(sessionId);
+            res.writeHead(200, { "content-type": "application/json" });
+            res.end(JSON.stringify({ ok: true }));
+          } else {
+            // Invalid request - no session and not a POST
+            res.writeHead(400, { "content-type": "application/json" });
+            res.end(JSON.stringify({ error: "Invalid session or method" }));
+          }
         } else if (url === "/health") {
           res.writeHead(200, { "content-type": "application/json" });
-          res.end(JSON.stringify({ ok: true }));
+          res.end(JSON.stringify({ ok: true, sessions: this.sessions.size }));
         } else {
           res.writeHead(404).end();
         }
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
+        console.error(`[F9 MCP] Error handling request: ${message}`);
         res.writeHead(500, { "content-type": "application/json" });
         res.end(JSON.stringify({ error: message }));
       }
@@ -1541,13 +1600,23 @@ export class ObsidianMcpHost {
       server.listen(port, "127.0.0.1", () => resolve());
     });
 
-    this.mcp = mcp;
-    this.transport = transport;
     this.httpServer = server;
+    console.log(`[F9 MCP] Server started on https://127.0.0.1:${port}/mcp (multi-session enabled)`);
   }
 
   async stop(): Promise<void> {
+    // Close all active sessions
     const closePromises: Promise<void>[] = [];
+
+    for (const [sessionId, session] of this.sessions) {
+      closePromises.push(
+        session.mcp.close().then(() => {
+          console.log(`[F9 MCP] Closed session: ${sessionId}`);
+        })
+      );
+    }
+    this.sessions.clear();
+
     if (this.httpServer) {
       const s = this.httpServer;
       closePromises.push(
@@ -1555,12 +1624,9 @@ export class ObsidianMcpHost {
       );
       this.httpServer = undefined;
     }
-    if (this.mcp) {
-      await this.mcp.close();
-      this.mcp = undefined;
-    }
-    this.transport = undefined;
+
     await Promise.allSettled(closePromises);
+    console.log("[F9 MCP] Server stopped");
   }
 
   async restart(config?: Partial<McpConfig>): Promise<void> {

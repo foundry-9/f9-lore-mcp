@@ -38,11 +38,16 @@ No test framework is configured yet.
 ### MCP Host (`src/mcp/host.ts`)
 
 - `ObsidianMcpHost` wraps `@modelcontextprotocol/sdk` server
+- **Multi-session architecture**: supports multiple concurrent MCP clients
+  - Each client connection gets its own `McpServer` + `StreamableHTTPServerTransport` pair
+  - Sessions managed via `Map<sessionId, McpSession>`
+  - Routing based on `mcp-session-id` request header
+  - New sessions created on-demand for POST requests without valid session ID
 - Uses `StreamableHTTPServerTransport` for HTTPS/SSE transport
 - Requires mkcert-generated TLS certificates for localhost
 - Listens on `127.0.0.1:<port>` with endpoints:
-  - `/mcp` - MCP protocol endpoint (HTTPS)
-  - `/health` - Health check (HTTPS)
+  - `/mcp` - MCP protocol endpoint (HTTPS, multi-session)
+  - `/health` - Health check (HTTPS, reports session count)
 - Tools are registered via `McpServer.registerTool()` with Zod schemas for validation
 - Current tools:
   - **Basic Operations**

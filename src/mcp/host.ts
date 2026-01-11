@@ -163,12 +163,12 @@ export class ObsidianMcpHost {
       "obsidian.list_folders",
       {
         description: "List folders in the vault, optionally filtered by parent folder",
-        inputSchema: {
+        inputSchema: z.object({
           folder: z
             .string()
             .optional()
             .describe("Vault-relative parent folder path. If omitted, lists all folders in the vault."),
-        },
+        }),
       },
       async (args) => {
         const { folder } = args;
@@ -202,12 +202,12 @@ export class ObsidianMcpHost {
       "obsidian.list_notes",
       {
         description: "List notes in the vault, optionally filtered by folder",
-        inputSchema: {
+        inputSchema: z.object({
           folder: z
             .string()
             .optional()
             .describe("Vault-relative folder path to list notes from. If omitted, lists all notes in the vault."),
-        },
+        }),
       },
       async (args) => {
         const { folder } = args;
@@ -231,13 +231,13 @@ export class ObsidianMcpHost {
       "obsidian.create_note",
       {
         description: "Create a note in the current vault",
-        inputSchema: {
+        inputSchema: z.object({
           path: z
             .string()
             .describe("Vault-relative path, e.g. 'Folder/Note.md'")
             .min(1),
           content: z.string().optional().describe("Initial note contents"),
-        },
+        }),
       },
       async (args) => {
         const { path, content } = args;
@@ -268,12 +268,12 @@ export class ObsidianMcpHost {
       "obsidian.read_note",
       {
         description: "Read the contents of a note in the current vault",
-        inputSchema: {
+        inputSchema: z.object({
           path: z
             .string()
             .describe("Vault-relative path, e.g. 'Folder/Note.md'")
             .min(1),
-        },
+        }),
       },
       async (args) => {
         const { path } = args;
@@ -297,13 +297,13 @@ export class ObsidianMcpHost {
       "obsidian.update_note",
       {
         description: "Update the contents of an existing note in the current vault",
-        inputSchema: {
+        inputSchema: z.object({
           path: z
             .string()
             .describe("Vault-relative path, e.g. 'Folder/Note.md'")
             .min(1),
           content: z.string().describe("New contents for the note"),
-        },
+        }),
       },
       async (args) => {
         const { path, content } = args;
@@ -327,12 +327,12 @@ export class ObsidianMcpHost {
       "obsidian.delete_note",
       {
         description: "Delete a note from the current vault (moves to system trash)",
-        inputSchema: {
+        inputSchema: z.object({
           path: z
             .string()
             .describe("Vault-relative path, e.g. 'Folder/Note.md'")
             .min(1),
-        },
+        }),
       },
       async (args) => {
         const { path } = args;
@@ -356,7 +356,7 @@ export class ObsidianMcpHost {
       "obsidian.move_or_rename_note",
       {
         description: "Move or rename a note in the current vault",
-        inputSchema: {
+        inputSchema: z.object({
           from: z
             .string()
             .describe("Current vault-relative path, e.g. 'Folder/Note.md'")
@@ -365,7 +365,7 @@ export class ObsidianMcpHost {
             .string()
             .describe("New vault-relative path, e.g. 'NewFolder/RenamedNote.md'")
             .min(1),
-        },
+        }),
       },
       async (args) => {
         const { from, to } = args;
@@ -404,12 +404,12 @@ export class ObsidianMcpHost {
       "obsidian.create_folder",
       {
         description: "Create a folder in the current vault (creates intermediate folders as needed)",
-        inputSchema: {
+        inputSchema: z.object({
           path: z
             .string()
             .describe("Vault-relative folder path, e.g. 'Parent/Child/NewFolder'")
             .min(1),
-        },
+        }),
       },
       async (args) => {
         const { path } = args;
@@ -432,7 +432,7 @@ export class ObsidianMcpHost {
       "obsidian.delete_folder",
       {
         description: "Delete a folder from the current vault (moves to system trash)",
-        inputSchema: {
+        inputSchema: z.object({
           path: z
             .string()
             .describe("Vault-relative folder path, e.g. 'Folder/Subfolder'")
@@ -442,7 +442,7 @@ export class ObsidianMcpHost {
             .optional()
             .default(false)
             .describe("If true, delete folder even if it contains files. Defaults to false."),
-        },
+        }),
       },
       async (args) => {
         const { path, delete_if_not_empty } = args;
@@ -489,7 +489,7 @@ export class ObsidianMcpHost {
       {
         description:
           "Get the structural overview of a note (headings, sections, list items, frontmatter) with a freshness token for subsequent edits. Returns metadata without full content for token efficiency.",
-        inputSchema: {
+        inputSchema: z.object({
           path: z
             .string()
             .describe("Vault-relative path, e.g. 'Folder/Note.md'")
@@ -499,7 +499,7 @@ export class ObsidianMcpHost {
             .optional()
             .default(false)
             .describe("If true, includes full content for sections instead of previews"),
-        },
+        }),
       },
       async (args) => {
         const { path, include_content } = args;
@@ -542,14 +542,14 @@ export class ObsidianMcpHost {
       "obsidian.read_section",
       {
         description: "Read the full content of a specific section by ID (from get_note_structure)",
-        inputSchema: {
+        inputSchema: z.object({
           path: z.string().describe("Vault-relative path").min(1),
           section_id: z.string().describe("Section ID from get_note_structure, e.g. 's-paragraph-15'").min(1),
           freshnessToken: z
             .string()
             .optional()
             .describe("Token from get_note_structure to verify file hasn't changed"),
-        },
+        }),
       },
       async (args) => {
         const { path, section_id, freshnessToken } = args;
@@ -623,14 +623,14 @@ export class ObsidianMcpHost {
       {
         description:
           "Read all content under a heading (until the next heading of same or higher level)",
-        inputSchema: {
+        inputSchema: z.object({
           path: z.string().describe("Vault-relative path").min(1),
           heading_id: z.string().describe("Heading ID from get_note_structure, e.g. 'h-2-42'").min(1),
           freshnessToken: z
             .string()
             .optional()
             .describe("Token from get_note_structure to verify file hasn't changed"),
-        },
+        }),
       },
       async (args) => {
         const { path, heading_id, freshnessToken } = args;
@@ -704,13 +704,13 @@ export class ObsidianMcpHost {
       "obsidian.read_frontmatter",
       {
         description: "Read frontmatter (YAML) from a note as structured JSON",
-        inputSchema: {
+        inputSchema: z.object({
           path: z.string().describe("Vault-relative path").min(1),
           keys: z
             .array(z.string())
             .optional()
             .describe("Specific keys to read. If omitted, reads all frontmatter."),
-        },
+        }),
       },
       async (args) => {
         const { path, keys } = args;
@@ -787,7 +787,7 @@ export class ObsidianMcpHost {
       "obsidian.update_section",
       {
         description: "Update the content of a specific section",
-        inputSchema: {
+        inputSchema: z.object({
           path: z.string().describe("Vault-relative path").min(1),
           section_id: z.string().describe("Section ID from get_note_structure").min(1),
           freshnessToken: z.string().describe("Token from last read to verify file hasn't changed").min(1),
@@ -797,7 +797,7 @@ export class ObsidianMcpHost {
             .optional()
             .default(true)
             .describe("If true, verify the change was applied"),
-        },
+        }),
       },
       async (args) => {
         const { path, section_id, freshnessToken, content: newContent, verify } = args;
@@ -858,12 +858,12 @@ export class ObsidianMcpHost {
       "obsidian.delete_section",
       {
         description: "Delete a section from a note",
-        inputSchema: {
+        inputSchema: z.object({
           path: z.string().describe("Vault-relative path").min(1),
           section_id: z.string().describe("Section ID from get_note_structure").min(1),
           freshnessToken: z.string().describe("Token from last read").min(1),
           verify: z.boolean().optional().default(true),
-        },
+        }),
       },
       async (args) => {
         const { path, section_id, freshnessToken, verify } = args;
@@ -924,7 +924,7 @@ export class ObsidianMcpHost {
       "obsidian.update_heading_content",
       {
         description: "Update all content under a heading (until next same/higher level heading)",
-        inputSchema: {
+        inputSchema: z.object({
           path: z.string().describe("Vault-relative path").min(1),
           heading_id: z.string().describe("Heading ID from get_note_structure").min(1),
           freshnessToken: z.string().describe("Token from last read").min(1),
@@ -935,7 +935,7 @@ export class ObsidianMcpHost {
             .default(true)
             .describe("If true, only replaces content before first subheading"),
           verify: z.boolean().optional().default(true),
-        },
+        }),
       },
       async (args) => {
         const { path, heading_id, freshnessToken, content: newContent, preserve_subheadings, verify } = args;
@@ -996,7 +996,7 @@ export class ObsidianMcpHost {
       "obsidian.rename_heading",
       {
         description: "Rename a heading (change text and/or level)",
-        inputSchema: {
+        inputSchema: z.object({
           path: z.string().describe("Vault-relative path").min(1),
           heading_id: z.string().describe("Heading ID from get_note_structure").min(1),
           freshnessToken: z.string().describe("Token from last read").min(1),
@@ -1008,7 +1008,7 @@ export class ObsidianMcpHost {
             .optional()
             .describe("New heading level (1-6). If omitted, keeps current level."),
           verify: z.boolean().optional().default(true),
-        },
+        }),
       },
       async (args) => {
         const { path, heading_id, freshnessToken, new_text, new_level, verify } = args;
@@ -1069,7 +1069,7 @@ export class ObsidianMcpHost {
       "obsidian.update_list_item",
       {
         description: "Update a list item's text and/or task status",
-        inputSchema: {
+        inputSchema: z.object({
           path: z.string().describe("Vault-relative path").min(1),
           list_item_id: z.string().describe("List item ID from get_note_structure").min(1),
           freshnessToken: z.string().describe("Token from last read").min(1),
@@ -1079,7 +1079,7 @@ export class ObsidianMcpHost {
             .optional()
             .describe("Task status character: ' ' for incomplete, 'x' for complete, or other character"),
           verify: z.boolean().optional().default(true),
-        },
+        }),
       },
       async (args) => {
         const { path, list_item_id, freshnessToken, text, task_status, verify } = args;
@@ -1175,19 +1175,19 @@ export class ObsidianMcpHost {
       "obsidian.update_frontmatter",
       {
         description: "Update frontmatter properties. Use null as a value to delete a key.",
-        inputSchema: {
+        inputSchema: z.object({
           path: z.string().describe("Vault-relative path").min(1),
           freshnessToken: z.string().describe("Token from last read").min(1),
           updates: z
-            .record(z.any())
-            .describe("Key-value pairs to set. Use null to delete a key."),
+            .record(z.string(), z.string())
+            .describe("Key-value pairs to set (values are JSON-stringified). Use 'null' to delete a key."),
           replace_all: z
             .boolean()
             .optional()
             .default(false)
             .describe("If true, replaces entire frontmatter instead of merging"),
           verify: z.boolean().optional().default(true),
-        },
+        }),
       },
       async (args) => {
         const { path, freshnessToken, updates, replace_all, verify } = args;
@@ -1248,7 +1248,7 @@ export class ObsidianMcpHost {
       "obsidian.insert_content",
       {
         description: "Insert content at a specific position in a note",
-        inputSchema: {
+        inputSchema: z.object({
           path: z.string().describe("Vault-relative path").min(1),
           freshnessToken: z.string().describe("Token from last read").min(1),
           position: z
@@ -1265,7 +1265,7 @@ export class ObsidianMcpHost {
             .describe("Where to insert: after/before section, under heading, at line number, or at start/end of file"),
           content: z.string().describe("Content to insert"),
           verify: z.boolean().optional().default(true),
-        },
+        }),
       },
       async (args) => {
         const { path, freshnessToken, position, content: newContent, verify } = args;
@@ -1326,7 +1326,7 @@ export class ObsidianMcpHost {
       "obsidian.refresh_index",
       {
         description: "Check for new or modified files and update the vector index (same as startup check)",
-        inputSchema: {},
+        inputSchema: z.object({}),
       },
       async () => {
         if (!this.vectorIndexer) {
@@ -1379,7 +1379,7 @@ export class ObsidianMcpHost {
       "obsidian.reindex_vault",
       {
         description: "Force re-embed all markdown files in the vault for vector search",
-        inputSchema: {},
+        inputSchema: z.object({}),
       },
       async () => {
         if (!this.vectorIndexer) {
@@ -1430,14 +1430,14 @@ export class ObsidianMcpHost {
       "obsidian.search",
       {
         description: "Semantic vector search across vault notes using embeddings",
-        inputSchema: {
+        inputSchema: z.object({
           query: z.string().describe("Natural language search query").min(1),
           limit: z
             .number()
             .optional()
             .default(10)
             .describe("Maximum number of results (default: 10)"),
-        },
+        }),
       },
       async (args) => {
         const { query, limit } = args;
@@ -1493,7 +1493,11 @@ export class ObsidianMcpHost {
    * Create a new MCP session with its own server and transport.
    */
   private async createSession(): Promise<{ sessionId: string; session: McpSession }> {
-    const mcp = new McpServer({ name: "F9 Obsidian MCP", version: "1.0.0" });
+    const mcp = new McpServer(
+      { name: "F9 Obsidian MCP", version: "1.0.0" },
+      { capabilities: { tools: { listChanged: true } } }
+    );
+
     this.registerTools(mcp);
 
     const sessionId = randomUUID();
@@ -1504,7 +1508,9 @@ export class ObsidianMcpHost {
       enableDnsRebindingProtection: this.config.enableDnsRebindingProtection ?? false,
     });
 
+    console.log(`[F9 MCP] Connecting MCP server to transport...`);
     await mcp.connect(transport);
+    console.log(`[F9 MCP] Connected`);
 
     const session: McpSession = {
       mcp,
@@ -1563,27 +1569,81 @@ export class ObsidianMcpHost {
           // Extract session ID from request headers
           const sessionId = req.headers["mcp-session-id"] as string | undefined;
 
+          console.log(`[F9 MCP] ${req.method} /mcp - sessionId: ${sessionId || "(none)"}, existing sessions: ${this.sessions.size}`);
+
           if (sessionId && this.sessions.has(sessionId)) {
             // Route to existing session
+            console.log(`[F9 MCP] Routing to existing session: ${sessionId}`);
             const session = this.sessions.get(sessionId)!;
-            await session.transport.handleRequest(req, res);
+            try {
+              await session.transport.handleRequest(req, res);
+              console.log(`[F9 MCP] Request handled successfully for session: ${sessionId}`);
+            } catch (transportErr) {
+              console.error(`[F9 MCP] Transport error for session ${sessionId}:`, transportErr);
+              throw transportErr;
+            }
           } else if (req.method === "POST") {
             // Create new session for POST without valid session ID
-            const { session } = await this.createSession();
-            await session.transport.handleRequest(req, res);
+            console.log(`[F9 MCP] Creating new session for POST request`);
+            const { sessionId: newSessionId, session } = await this.createSession();
+            console.log(`[F9 MCP] Handling request with new session: ${newSessionId}`);
+            try {
+              await session.transport.handleRequest(req, res);
+              console.log(`[F9 MCP] Initial request handled for session: ${newSessionId}`);
+            } catch (transportErr) {
+              console.error(`[F9 MCP] Transport error for new session ${newSessionId}:`, transportErr);
+              throw transportErr;
+            }
           } else if (req.method === "DELETE" && sessionId) {
             // Handle session termination
+            console.log(`[F9 MCP] DELETE request for session: ${sessionId}`);
             await this.closeSession(sessionId);
             res.writeHead(200, { "content-type": "application/json" });
             res.end(JSON.stringify({ ok: true }));
+          } else if (req.method === "GET") {
+            // GET requests need a valid session for SSE streams
+            console.log(`[F9 MCP] GET request without valid session - rejecting`);
+            res.writeHead(400, { "content-type": "application/json" });
+            res.end(JSON.stringify({ error: "GET requires valid mcp-session-id header" }));
           } else {
             // Invalid request - no session and not a POST
+            console.log(`[F9 MCP] Invalid request: method=${req.method}, sessionId=${sessionId}`);
             res.writeHead(400, { "content-type": "application/json" });
             res.end(JSON.stringify({ error: "Invalid session or method" }));
           }
         } else if (url === "/health") {
           res.writeHead(200, { "content-type": "application/json" });
           res.end(JSON.stringify({ ok: true, sessions: this.sessions.size }));
+        } else if (url === "/debug") {
+          // Debug endpoint to inspect server state
+          const sessionInfo: Record<string, unknown>[] = [];
+          for (const [sid, sess] of this.sessions) {
+            const toolCount = Object.keys((sess.mcp as unknown as { _registeredTools: Record<string, unknown> })._registeredTools || {}).length;
+            sessionInfo.push({
+              sessionId: sid,
+              createdAt: sess.createdAt,
+              toolCount,
+            });
+          }
+          res.writeHead(200, { "content-type": "application/json" });
+          res.end(JSON.stringify({ sessions: sessionInfo }, null, 2));
+        } else if (url === "/debug/tools") {
+          // Debug: Get actual tools list from first session
+          const firstSession = this.sessions.values().next().value;
+          if (firstSession) {
+            const registeredTools = (firstSession.mcp as unknown as { _registeredTools: Record<string, { description?: string; enabled: boolean }> })._registeredTools || {};
+            const tools = Object.entries(registeredTools)
+              .filter(([, tool]) => tool.enabled)
+              .map(([name, tool]) => ({
+                name,
+                description: tool.description,
+              }));
+            res.writeHead(200, { "content-type": "application/json" });
+            res.end(JSON.stringify({ tools }, null, 2));
+          } else {
+            res.writeHead(404, { "content-type": "application/json" });
+            res.end(JSON.stringify({ error: "No sessions" }));
+          }
         } else {
           res.writeHead(404).end();
         }
@@ -1601,7 +1661,7 @@ export class ObsidianMcpHost {
     });
 
     this.httpServer = server;
-    console.log(`[F9 MCP] Server started on https://127.0.0.1:${port}/mcp (multi-session enabled)`);
+    console.log(`[F9 MCP] Server started on https://127.0.0.1:${port}/mcp (multi-session v2 - ${new Date().toISOString()})`);
   }
 
   async stop(): Promise<void> {

@@ -49,6 +49,11 @@ No test framework is configured yet.
   - `/mcp` - MCP protocol endpoint (HTTPS, multi-session)
   - `/health` - Health check (HTTPS, reports session count)
 - Tools are registered via `McpServer.registerTool()` with Zod schemas for validation
+- **Zod Schema Constraints**: Some Zod types fail when the MCP SDK converts them to JSON Schema in Obsidian's bundled environment:
+  - ❌ **Avoid**: `z.any()`, `z.unknown()`, `z.record(z.any())`, `z.record(z.unknown())`
+  - ✅ **Use instead**: Explicit types like `z.record(z.string(), z.string())`, `z.union([...])`, or `z.object({...})`
+  - This is due to how esbuild bundles Zod for the Obsidian Electron runtime; the same schemas work fine in Node.js
+  - When adding new tools, test that `tools/list` still works after reloading Obsidian
 - Current tools:
   - **Basic Operations**
     - `obsidian.ping` - Simple ping/pong health check

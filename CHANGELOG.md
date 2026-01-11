@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Fix `tools/list` failing in Obsidian's bundled environment due to Zod schema serialization issue
+  - `z.record(z.any())` and `z.record(z.unknown())` fail to convert to JSON schema when bundled with esbuild for Obsidian
+  - Changed `obsidian.update_frontmatter` tool's `updates` field from `z.record(z.any())` to `z.record(z.string(), z.string())`
+  - Frontmatter values are now JSON-stringified; use `'null'` string to delete a key
+
 ### Added
 
 - **Multi-session support** for concurrent MCP client connections

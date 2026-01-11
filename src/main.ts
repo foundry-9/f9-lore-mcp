@@ -8,6 +8,8 @@ interface F9ObsidianMCPSettings {
   mcpEnabled: boolean;
   mcpPort: number;
   mcpDnsRebindingProtection: boolean;
+  mcpTlsCertPath: string;
+  mcpTlsKeyPath: string;
   vectorSearch: VectorSearchSettings;
 }
 
@@ -16,6 +18,8 @@ const DEFAULT_SETTINGS: F9ObsidianMCPSettings = {
   mcpEnabled: false,
   mcpPort: 3030,
   mcpDnsRebindingProtection: true,
+  mcpTlsCertPath: "",
+  mcpTlsKeyPath: "",
   vectorSearch: DEFAULT_VECTOR_SETTINGS,
 };
 
@@ -122,16 +126,26 @@ export default class F9ObsidianMCPPlugin extends Plugin {
         `127.0.0.1:${this.settings.mcpPort}`,
       ],
       enableDnsRebindingProtection: this.settings.mcpDnsRebindingProtection,
+      tls: {
+        certPath: this.settings.mcpTlsCertPath,
+        keyPath: this.settings.mcpTlsKeyPath,
+      },
     };
 
     this.mcpHost ??= new ObsidianMcpHost(this.app, cfg, this.vectorIndexer);
 
     // Restart with latest config
     if (cfg.enabled) {
-      await this.mcpHost.restart(cfg);
-      console.log(
-        `F9 Obsidian MCP server listening on http://127.0.0.1:${cfg.port}/mcp`
-      );
+      try {
+        await this.mcpHost.restart(cfg);
+        console.log(
+          `F9 Obsidian MCP server listening on https://127.0.0.1:${cfg.port}/mcp`
+        );
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        console.error(`F9 Obsidian MCP: Failed to start server: ${message}`);
+        new Notice(`MCP Server Error: ${message}`);
+      }
     } else {
       await this.mcpHost.stop();
     }
@@ -167,7 +181,7 @@ class F9ObsidianMCPSettingTab extends PluginSettingTab {
     new Setting(containerEl)
       .setName("Enable MCP server")
       .setDesc(
-        "Host an MCP server inside Obsidian (local HTTP on 127.0.0.1)."
+        "Host an MCP server inside Obsidian (HTTPS on 127.0.0.1). Requires mkcert certificates."
       )
       .addToggle((toggle) =>
         toggle
@@ -180,7 +194,7 @@ class F9ObsidianMCPSettingTab extends PluginSettingTab {
 
     new Setting(containerEl)
       .setName("MCP port")
-      .setDesc("Local port for the MCP HTTP endpoint")
+      .setDesc("Local port for the MCP HTTPS endpoint")
       .addText((text) =>
         text
           .setPlaceholder("3030")
@@ -196,7 +210,7 @@ class F9ObsidianMCPSettingTab extends PluginSettingTab {
 
     new Setting(containerEl)
       .setName("DNS rebinding protection")
-      .setDesc("Validate Host header for local HTTP requests")
+      .setDesc("Validate Host header for local HTTPS requests")
       .addToggle((toggle) =>
         toggle
           .setValue(this.plugin.settings.mcpDnsRebindingProtection)
@@ -205,6 +219,37 @@ class F9ObsidianMCPSettingTab extends PluginSettingTab {
             await this.plugin.saveSettings();
           })
       );
+
+    new Setting(containerEl)
+      .setName("TLS certificate file")
+      .setDesc("Path to mkcert certificate (e.g., localhost+1.pem)")
+      .addText((text) =>
+        text
+          .setPlaceholder("/path/to/localhost+1.pem")
+          .setValue(this.plugin.settings.mcpTlsCertPath)
+          .onChange(async (value) => {
+            this.plugin.settings.mcpTlsCertPath = value;
+            await this.plugin.saveSettings();
+          })
+      );
+
+    new Setting(containerEl)
+      .setName("TLS key file")
+      .setDesc("Path to mkcert private key (e.g., localhost+1-key.pem)")
+      .addText((text) =>
+        text
+          .setPlaceholder("/path/to/localhost+1-key.pem")
+          .setValue(this.plugin.settings.mcpTlsKeyPath)
+          .onChange(async (value) => {
+            this.plugin.settings.mcpTlsKeyPath = value;
+            await this.plugin.saveSettings();
+          })
+      );
+
+    containerEl.createEl("p", {
+      text: "Generate certificates: mkcert localhost 127.0.0.1",
+      cls: "setting-item-description",
+    });
 
     // Vector Search Settings
     containerEl.createEl("h3", { text: "Vector Search" });

@@ -4,6 +4,13 @@
 
 ### Added
 
+- **HTTPS support with mkcert certificates** for secure localhost connections
+  - MCP server now uses HTTPS instead of HTTP
+  - Compatible with Claude Desktop and other clients requiring trusted TLS
+  - New settings: TLS certificate file path, TLS key file path
+  - Validates certificate files exist before server startup
+  - Clear error messages via Obsidian Notice when TLS configuration is invalid
+
 - **Granular markdown editing tools** for token-efficient note editing
   - `obsidian.get_note_structure` - Get structural overview (headings, sections, list items, frontmatter) with freshness token
   - `obsidian.read_section` - Read specific section content by ID

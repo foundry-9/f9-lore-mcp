@@ -1,6 +1,8 @@
 import type { App, TFile, TFolder } from "obsidian";
 import { z } from "zod";
-import { createServer, IncomingMessage, ServerResponse } from "node:http";
+import { createServer, IncomingMessage, ServerResponse, ServerOptions } from "node:https";
+import type { Server } from "node:http";
+import { readFileSync, existsSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
@@ -34,12 +36,16 @@ export interface McpConfig {
   allowedHosts?: string[];
   allowedOrigins?: string[];
   enableDnsRebindingProtection?: boolean;
+  tls?: {
+    certPath: string;
+    keyPath: string;
+  };
 }
 
 export class ObsidianMcpHost {
   private app: App;
   private config: McpConfig;
-  private httpServer?: ReturnType<typeof createServer>;
+  private httpServer?: Server;
   private transport?: StreamableHTTPServerTransport;
   private mcp?: McpServer;
   private vectorIndexer?: VectorIndexer;
@@ -1492,7 +1498,27 @@ export class ObsidianMcpHost {
 
     await mcp.connect(transport);
 
-    const server = createServer(async (req: IncomingMessage, res: ServerResponse) => {
+    // Validate TLS configuration
+    if (!this.config.tls) {
+      throw new Error("TLS configuration is required. Please configure certificate paths in settings.");
+    }
+    if (!this.config.tls.certPath || !this.config.tls.keyPath) {
+      throw new Error("TLS certificate and key paths are required. Please configure them in settings.");
+    }
+    if (!existsSync(this.config.tls.certPath)) {
+      throw new Error(`TLS certificate file not found: ${this.config.tls.certPath}`);
+    }
+    if (!existsSync(this.config.tls.keyPath)) {
+      throw new Error(`TLS key file not found: ${this.config.tls.keyPath}`);
+    }
+
+    // Create HTTPS server with TLS options
+    const tlsOptions: ServerOptions = {
+      cert: readFileSync(this.config.tls.certPath),
+      key: readFileSync(this.config.tls.keyPath),
+    };
+
+    const server = createServer(tlsOptions, async (req: IncomingMessage, res: ServerResponse) => {
       try {
         const url = req.url || "/";
         if (url === "/mcp") {

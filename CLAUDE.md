@@ -38,10 +38,11 @@ No test framework is configured yet.
 ### MCP Host (`src/mcp/host.ts`)
 
 - `ObsidianMcpHost` wraps `@modelcontextprotocol/sdk` server
-- Uses `StreamableHTTPServerTransport` for HTTP/SSE transport
+- Uses `StreamableHTTPServerTransport` for HTTPS/SSE transport
+- Requires mkcert-generated TLS certificates for localhost
 - Listens on `127.0.0.1:<port>` with endpoints:
-  - `/mcp` - MCP protocol endpoint
-  - `/health` - Health check
+  - `/mcp` - MCP protocol endpoint (HTTPS)
+  - `/health` - Health check (HTTPS)
 - Tools are registered via `McpServer.registerTool()` with Zod schemas for validation
 - Current tools:
   - **Basic Operations**

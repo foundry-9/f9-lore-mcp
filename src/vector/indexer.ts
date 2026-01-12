@@ -343,6 +343,16 @@ export class VectorIndexer {
   }
 
   /**
+   * Get the current indexing status for status bar display.
+   */
+  getIndexingStatus(): { isIndexing: boolean; pendingCount: number } {
+    return {
+      isIndexing: this.isIndexing,
+      pendingCount: this.pendingFiles.size,
+    };
+  }
+
+  /**
    * Check if the embedding provider is available.
    */
   async checkProviderConnection(): Promise<boolean> {

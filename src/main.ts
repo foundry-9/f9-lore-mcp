@@ -27,6 +27,7 @@ export default class F9ObsidianMCPPlugin extends Plugin {
   settings!: F9ObsidianMCPSettings;
   private mcpHost?: ObsidianMcpHost;
   vectorIndexer?: VectorIndexer;
+  private statusBarItem?: HTMLElement;
 
   async onload() {
     console.log("Loading plugin: F9 Obsidian MCP");
@@ -89,8 +90,13 @@ export default class F9ObsidianMCPPlugin extends Plugin {
     );
     ribbon.addClass("f9-obsidian-mcp-ribbon-icon");
 
-    const statusBar = this.addStatusBarItem();
-    statusBar.setText("F9 MCP ready");
+    this.statusBarItem = this.addStatusBarItem();
+    this.updateStatusBar();
+
+    // Update status bar every 2 seconds
+    this.registerInterval(
+      window.setInterval(() => this.updateStatusBar(), 2000)
+    );
 
     this.addCommand({
       id: "f9-obsidian-mcp-say-hello",
@@ -153,6 +159,34 @@ export default class F9ObsidianMCPPlugin extends Plugin {
     } else {
       await this.mcpHost.stop();
     }
+  }
+
+  private updateStatusBar(): void {
+    if (!this.statusBarItem) return;
+
+    const parts: string[] = ["F9 MCP"];
+
+    // Add session count if MCP is running
+    if (this.mcpHost?.isRunning()) {
+      const sessionCount = this.mcpHost.getSessionCount();
+      parts.push(`${sessionCount} session${sessionCount !== 1 ? "s" : ""}`);
+    } else if (this.settings.mcpEnabled) {
+      parts.push("starting...");
+    } else {
+      parts.push("off");
+    }
+
+    // Add indexing status
+    if (this.vectorIndexer) {
+      const indexStatus = this.vectorIndexer.getIndexingStatus();
+      if (indexStatus.isIndexing) {
+        parts.push("indexing...");
+      } else if (indexStatus.pendingCount > 0) {
+        parts.push(`${indexStatus.pendingCount} pending`);
+      }
+    }
+
+    this.statusBarItem.setText(parts.join(" | "));
   }
 }
 

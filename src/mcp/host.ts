@@ -150,6 +150,13 @@ export class ObsidianMcpHost {
   }
 
   /**
+   * Get the number of active MCP sessions.
+   */
+  getSessionCount(): number {
+    return this.sessions.size;
+  }
+
+  /**
    * Register all MCP tools on a server instance.
    */
   private registerTools(mcp: McpServer): void {

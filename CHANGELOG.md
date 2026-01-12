@@ -4,6 +4,12 @@
 
 ### Added
 
+- **Dynamic status bar** showing real-time plugin state
+  - Displays active MCP session count (e.g., "F9 MCP | 2 sessions")
+  - Shows indexing status when files are being embedded ("indexing..." or "3 pending")
+  - Shows "off" when MCP server is disabled, "starting..." during initialization
+  - Updates every 2 seconds for responsive feedback
+
 - **OpenAI embeddings support** as alternative to Ollama
   - New "Embedding provider" dropdown to choose between Ollama (local) and OpenAI
   - OpenAI settings: API key (masked), model selector with common models, custom model input

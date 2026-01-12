@@ -295,32 +295,27 @@ class F9ObsidianMCPSettingTab extends PluginSettingTab {
       );
 
     new Setting(containerEl)
-      .setName("Ollama URL")
-      .setDesc("URL of your Ollama instance")
-      .addText((text) =>
-        text
-          .setPlaceholder("http://localhost:11434")
-          .setValue(this.plugin.settings.vectorSearch.ollamaUrl)
+      .setName("Embedding provider")
+      .setDesc("Choose the embedding service to use")
+      .addDropdown((dropdown) =>
+        dropdown
+          .addOption("ollama", "Ollama (local)")
+          .addOption("openai", "OpenAI")
+          .setValue(this.plugin.settings.vectorSearch.embeddingProvider)
           .onChange(async (value) => {
-            this.plugin.settings.vectorSearch.ollamaUrl = value;
+            this.plugin.settings.vectorSearch.embeddingProvider = value as "ollama" | "openai";
             this.plugin.vectorIndexer?.updateSettings(this.plugin.settings.vectorSearch);
             await this.plugin.saveSettings();
+            this.display(); // Refresh to show provider-specific settings
           })
       );
 
-    new Setting(containerEl)
-      .setName("Embedding model")
-      .setDesc("Ollama model for generating embeddings")
-      .addText((text) =>
-        text
-          .setPlaceholder("nomic-embed-text:latest")
-          .setValue(this.plugin.settings.vectorSearch.embeddingModel)
-          .onChange(async (value) => {
-            this.plugin.settings.vectorSearch.embeddingModel = value;
-            this.plugin.vectorIndexer?.updateSettings(this.plugin.settings.vectorSearch);
-            await this.plugin.saveSettings();
-          })
-      );
+    // Conditionally show provider-specific settings
+    if (this.plugin.settings.vectorSearch.embeddingProvider === "ollama") {
+      this.renderOllamaSettings(containerEl);
+    } else {
+      this.renderOpenAISettings(containerEl);
+    }
 
     new Setting(containerEl)
       .setName("Reindex vault")
@@ -333,9 +328,14 @@ class F9ObsidianMCPSettingTab extends PluginSettingTab {
             return;
           }
 
-          const available = await indexer.checkOllamaConnection();
+          const available = await indexer.checkProviderConnection();
           if (!available) {
-            new Notice("Cannot connect to Ollama. Is it running?");
+            const provider = this.plugin.settings.vectorSearch.embeddingProvider;
+            if (provider === "ollama") {
+              new Notice("Cannot connect to Ollama. Is it running?");
+            } else {
+              new Notice("Cannot connect to OpenAI. Check your API key.");
+            }
             return;
           }
 
@@ -363,9 +363,126 @@ class F9ObsidianMCPSettingTab extends PluginSettingTab {
       new Setting(containerEl)
         .setName("Index status")
         .setDesc(
-          `${stats.fileCount} files, ${stats.chunkCount} chunks indexed using ${stats.model}`
+          `${stats.fileCount} files, ${stats.chunkCount} chunks indexed using ${stats.providerKey}`
         );
     }
+  }
+
+  /**
+   * Render Ollama-specific settings.
+   */
+  private renderOllamaSettings(containerEl: HTMLElement): void {
+    new Setting(containerEl)
+      .setName("Ollama URL")
+      .setDesc("URL of your Ollama instance")
+      .addText((text) =>
+        text
+          .setPlaceholder("http://localhost:11434")
+          .setValue(this.plugin.settings.vectorSearch.ollamaUrl)
+          .onChange(async (value) => {
+            this.plugin.settings.vectorSearch.ollamaUrl = value;
+            this.plugin.vectorIndexer?.updateSettings(this.plugin.settings.vectorSearch);
+            await this.plugin.saveSettings();
+          })
+      );
+
+    new Setting(containerEl)
+      .setName("Embedding model")
+      .setDesc("Ollama model for generating embeddings")
+      .addText((text) =>
+        text
+          .setPlaceholder("nomic-embed-text:latest")
+          .setValue(this.plugin.settings.vectorSearch.embeddingModel)
+          .onChange(async (value) => {
+            this.plugin.settings.vectorSearch.embeddingModel = value;
+            this.plugin.vectorIndexer?.updateSettings(this.plugin.settings.vectorSearch);
+            await this.plugin.saveSettings();
+          })
+      );
+  }
+
+  /**
+   * Render OpenAI-specific settings.
+   */
+  private renderOpenAISettings(containerEl: HTMLElement): void {
+    new Setting(containerEl)
+      .setName("OpenAI API key")
+      .setDesc("Your OpenAI API key (stored locally)")
+      .addText((text) => {
+        text
+          .setPlaceholder("sk-...")
+          .setValue(this.plugin.settings.vectorSearch.openaiApiKey)
+          .onChange(async (value) => {
+            this.plugin.settings.vectorSearch.openaiApiKey = value;
+            this.plugin.vectorIndexer?.updateSettings(this.plugin.settings.vectorSearch);
+            await this.plugin.saveSettings();
+          });
+        // Make it a password field for security
+        text.inputEl.type = "password";
+        text.inputEl.autocomplete = "off";
+      });
+
+    // OpenAI model selector with common models + custom option
+    const openaiModels = [
+      "text-embedding-3-small",
+      "text-embedding-3-large",
+      "text-embedding-ada-002",
+    ];
+    const currentModel = this.plugin.settings.vectorSearch.openaiModel;
+    const isCustomModel = !openaiModels.includes(currentModel);
+
+    new Setting(containerEl)
+      .setName("Embedding model")
+      .setDesc("OpenAI embedding model to use")
+      .addDropdown((dropdown) => {
+        dropdown.addOption("text-embedding-3-small", "text-embedding-3-small (1536 dim, cheapest)");
+        dropdown.addOption("text-embedding-3-large", "text-embedding-3-large (3072 dim, best)");
+        dropdown.addOption("text-embedding-ada-002", "text-embedding-ada-002 (1536 dim, legacy)");
+        dropdown.addOption("custom", "Custom model...");
+        dropdown.setValue(isCustomModel ? "custom" : currentModel);
+        dropdown.onChange(async (value) => {
+          if (value !== "custom") {
+            this.plugin.settings.vectorSearch.openaiModel = value;
+            this.plugin.vectorIndexer?.updateSettings(this.plugin.settings.vectorSearch);
+            await this.plugin.saveSettings();
+          }
+          this.display(); // Refresh to show/hide custom input
+        });
+      });
+
+    // Show custom model input if custom is selected
+    if (isCustomModel || this.plugin.settings.vectorSearch.openaiModel === "custom") {
+      new Setting(containerEl)
+        .setName("Custom model name")
+        .setDesc("Enter the model identifier")
+        .addText((text) =>
+          text
+            .setPlaceholder("text-embedding-3-small")
+            .setValue(isCustomModel ? currentModel : "")
+            .onChange(async (value) => {
+              if (value) {
+                this.plugin.settings.vectorSearch.openaiModel = value;
+                this.plugin.vectorIndexer?.updateSettings(this.plugin.settings.vectorSearch);
+                await this.plugin.saveSettings();
+              }
+            })
+        );
+    }
+
+    // Optional custom API endpoint
+    new Setting(containerEl)
+      .setName("Custom API endpoint (optional)")
+      .setDesc("For Azure OpenAI or compatible APIs. Leave empty for standard OpenAI.")
+      .addText((text) =>
+        text
+          .setPlaceholder("https://api.openai.com/v1")
+          .setValue(this.plugin.settings.vectorSearch.openaiBaseUrl)
+          .onChange(async (value) => {
+            this.plugin.settings.vectorSearch.openaiBaseUrl = value;
+            this.plugin.vectorIndexer?.updateSettings(this.plugin.settings.vectorSearch);
+            await this.plugin.saveSettings();
+          })
+      );
   }
 
   /**

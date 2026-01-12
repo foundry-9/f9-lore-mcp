@@ -4,6 +4,13 @@
 
 ### Added
 
+- **OpenAI embeddings support** as alternative to Ollama
+  - New "Embedding provider" dropdown to choose between Ollama (local) and OpenAI
+  - OpenAI settings: API key (masked), model selector with common models, custom model input
+  - Supported OpenAI models: text-embedding-3-small, text-embedding-3-large, text-embedding-ada-002
+  - Optional custom API endpoint for Azure OpenAI or compatible services
+  - Provider abstraction allows easy addition of future embedding providers
+
 - **Fuzzy filename matching for `read_note` tool**
   - When exact path is not found, searches all vault files for best filename match
   - Matches by filename (ignoring path and `.md` extension), e.g., "Friday Core" finds "Prompts/Friday Core.md"
@@ -11,6 +18,11 @@
   - Exact matches still return plain text content for backwards compatibility
 
 ### Changed
+
+- **Refactored embedding system to use provider abstraction**
+  - `EmbeddingProvider` interface implemented by both `OllamaClient` and new `OpenAIClient`
+  - Index invalidation now based on provider key (includes provider type + model + endpoint)
+  - Breaking: Index version bumped to 2, existing embeddings will be re-indexed on first use
 
 - **HTTPS is now optional** - MCP server can run in HTTP mode (default) or HTTPS mode
   - New "Enable HTTPS" toggle in settings

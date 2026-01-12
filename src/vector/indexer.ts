@@ -11,7 +11,8 @@ import type {
 } from "./types";
 import { createEmptyIndex, EMBEDDING_INDEX_VERSION } from "./types";
 import { chunkMarkdown } from "./chunker";
-import { OllamaClient } from "./ollama";
+import type { EmbeddingProvider } from "./provider";
+import { createEmbeddingProvider } from "./provider";
 import { topK } from "./similarity";
 
 /** Key used to store embedding index in plugin data */
@@ -28,7 +29,7 @@ const EMBEDDING_INDEX_KEY = "embeddingIndex";
  */
 export class VectorIndexer {
   private index: EmbeddingIndex;
-  private ollama: OllamaClient;
+  private provider: EmbeddingProvider;
   private pendingFiles: Set<string> = new Set();
   private debounceTimer?: ReturnType<typeof setTimeout>;
   private isIndexing = false;
@@ -38,8 +39,22 @@ export class VectorIndexer {
     private plugin: Plugin,
     private settings: VectorSearchSettings
   ) {
-    this.ollama = new OllamaClient(settings.ollamaUrl, settings.embeddingModel);
-    this.index = createEmptyIndex(settings);
+    this.provider = this.createProvider(settings);
+    this.index = createEmptyIndex(this.provider.getProviderKey());
+  }
+
+  /**
+   * Create an embedding provider based on settings.
+   */
+  private createProvider(settings: VectorSearchSettings): EmbeddingProvider {
+    return createEmbeddingProvider({
+      provider: settings.embeddingProvider,
+      ollamaUrl: settings.ollamaUrl,
+      ollamaModel: settings.embeddingModel,
+      openaiApiKey: settings.openaiApiKey,
+      openaiModel: settings.openaiModel,
+      openaiBaseUrl: settings.openaiBaseUrl || undefined,
+    });
   }
 
   /**
@@ -49,19 +64,20 @@ export class VectorIndexer {
   async loadIndex(): Promise<void> {
     const data = await this.plugin.loadData();
     const stored = data?.[EMBEDDING_INDEX_KEY] as EmbeddingIndex | undefined;
+    const currentProviderKey = this.provider.getProviderKey();
 
     if (stored && stored.version === EMBEDDING_INDEX_VERSION) {
-      // Check if model changed - if so, index is invalid
-      if (stored.model !== this.settings.embeddingModel) {
+      // Check if provider changed - if so, index is invalid
+      if (stored.providerKey !== currentProviderKey) {
         console.log(
-          `F9 MCP: Embedding model changed from ${stored.model} to ${this.settings.embeddingModel}, index invalidated`
+          `F9 MCP: Embedding provider changed from ${stored.providerKey} to ${currentProviderKey}, index invalidated`
         );
-        this.index = createEmptyIndex(this.settings);
+        this.index = createEmptyIndex(currentProviderKey);
       } else {
         this.index = stored;
       }
     } else {
-      this.index = createEmptyIndex(this.settings);
+      this.index = createEmptyIndex(currentProviderKey);
     }
   }
 
@@ -75,22 +91,21 @@ export class VectorIndexer {
   }
 
   /**
-   * Update settings and reinitialize Ollama client if needed.
+   * Update settings and reinitialize provider if needed.
    */
   updateSettings(settings: VectorSearchSettings): void {
-    const modelChanged = this.settings.embeddingModel !== settings.embeddingModel;
-    const urlChanged = this.settings.ollamaUrl !== settings.ollamaUrl;
+    const oldProviderKey = this.provider.getProviderKey();
 
     this.settings = settings;
+    this.provider = this.createProvider(settings);
 
-    if (urlChanged) {
-      this.ollama.setBaseUrl(settings.ollamaUrl);
-    }
-    if (modelChanged) {
-      this.ollama.setModel(settings.embeddingModel);
-      // Model change invalidates the index
-      console.log("F9 MCP: Embedding model changed, index invalidated");
-      this.index = createEmptyIndex(settings);
+    const newProviderKey = this.provider.getProviderKey();
+
+    if (oldProviderKey !== newProviderKey) {
+      console.log(
+        `F9 MCP: Embedding provider changed from ${oldProviderKey} to ${newProviderKey}, index invalidated`
+      );
+      this.index = createEmptyIndex(newProviderKey);
     }
   }
 
@@ -149,7 +164,7 @@ export class VectorIndexer {
     }
 
     // Generate embeddings for all chunks
-    const embeddings = await this.ollama.embed(chunks);
+    const embeddings = await this.provider.embed(chunks);
 
     // Remove old chunks for this file
     this.index.chunks = this.index.chunks.filter(c => c.filePath !== file.path);
@@ -191,8 +206,7 @@ export class VectorIndexer {
     // Clear existing index
     this.index.chunks = [];
     this.index.fileMtimes = {};
-    this.index.model = this.settings.embeddingModel;
-    this.index.ollamaUrl = this.settings.ollamaUrl;
+    this.index.providerKey = this.provider.getProviderKey();
 
     try {
       for (let i = 0; i < files.length; i++) {
@@ -229,7 +243,7 @@ export class VectorIndexer {
       return [];
     }
 
-    const [queryEmbedding] = await this.ollama.embed([query]);
+    const [queryEmbedding] = await this.provider.embed([query]);
     return topK(queryEmbedding, this.index.chunks, k);
   }
 
@@ -320,18 +334,18 @@ export class VectorIndexer {
   /**
    * Get statistics about the current index.
    */
-  getStats(): { fileCount: number; chunkCount: number; model: string } {
+  getStats(): { fileCount: number; chunkCount: number; providerKey: string } {
     return {
       fileCount: Object.keys(this.index.fileMtimes).length,
       chunkCount: this.index.chunks.length,
-      model: this.index.model,
+      providerKey: this.index.providerKey,
     };
   }
 
   /**
-   * Check if Ollama is available.
+   * Check if the embedding provider is available.
    */
-  async checkOllamaConnection(): Promise<boolean> {
-    return this.ollama.isAvailable();
+  async checkProviderConnection(): Promise<boolean> {
+    return this.provider.isAvailable();
   }
 }

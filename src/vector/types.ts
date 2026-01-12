@@ -2,8 +2,10 @@
  * Vector search types for F9 Obsidian MCP
  */
 
+import type { EmbeddingProviderType } from "./provider";
+
 /** Schema version for future migrations */
-export const EMBEDDING_INDEX_VERSION = 1;
+export const EMBEDDING_INDEX_VERSION = 2;
 
 /** A single chunk embedding with metadata */
 export interface ChunkEmbedding {
@@ -27,10 +29,8 @@ export interface ChunkEmbedding {
 export interface EmbeddingIndex {
   /** Schema version for future migrations */
   version: number;
-  /** Model identifier used to generate embeddings */
-  model: string;
-  /** Ollama endpoint used */
-  ollamaUrl: string;
+  /** Provider key for invalidation detection (e.g., "ollama:http://localhost:11434:nomic-embed-text") */
+  providerKey: string;
   /** Map of file path -> file mtime when last indexed */
   fileMtimes: Record<string, number>;
   /** All chunk embeddings */
@@ -41,10 +41,23 @@ export interface EmbeddingIndex {
 export interface VectorSearchSettings {
   /** Enable automatic embedding on file changes */
   autoIndex: boolean;
+  /** Embedding provider type */
+  embeddingProvider: EmbeddingProviderType;
+
+  // Ollama settings
   /** Ollama API endpoint */
   ollamaUrl: string;
-  /** Embedding model name */
+  /** Ollama embedding model name */
   embeddingModel: string;
+
+  // OpenAI settings
+  /** OpenAI API key */
+  openaiApiKey: string;
+  /** OpenAI embedding model name */
+  openaiModel: string;
+  /** Custom OpenAI-compatible endpoint (optional, for Azure etc.) */
+  openaiBaseUrl: string;
+
   /** Target chunk size in characters (~500 tokens = ~2000 chars) */
   chunkSize: number;
   /** Overlap between chunks in characters */
@@ -56,8 +69,12 @@ export interface VectorSearchSettings {
 /** Default vector search settings */
 export const DEFAULT_VECTOR_SETTINGS: VectorSearchSettings = {
   autoIndex: true,
+  embeddingProvider: "ollama",
   ollamaUrl: "http://localhost:11434",
   embeddingModel: "nomic-embed-text:latest",
+  openaiApiKey: "",
+  openaiModel: "text-embedding-3-small",
+  openaiBaseUrl: "",
   chunkSize: 2000,
   chunkOverlap: 200,
   debounceMs: 2000,
@@ -70,11 +87,10 @@ export interface SearchResult {
 }
 
 /** Create an empty embedding index */
-export function createEmptyIndex(settings: VectorSearchSettings): EmbeddingIndex {
+export function createEmptyIndex(providerKey: string): EmbeddingIndex {
   return {
     version: EMBEDDING_INDEX_VERSION,
-    model: settings.embeddingModel,
-    ollamaUrl: settings.ollamaUrl,
+    providerKey,
     fileMtimes: {},
     chunks: [],
   };

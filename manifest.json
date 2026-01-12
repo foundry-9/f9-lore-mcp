@@ -1,7 +1,7 @@
 {
   "id": "f9-obsidian-mcp",
   "name": "F9 Obsidian MCP",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "minAppVersion": "1.5.12",
   "description": "An MCP that runs inside an Obsidian plugin.",
   "author": "Charles Sebold",
@@ -9,4 +9,3 @@
   "isDesktopOnly": false,
   "main": "main.js"
 }
-

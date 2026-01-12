@@ -2,6 +2,8 @@
  * Ollama API client for embeddings
  */
 
+import type { EmbeddingProvider } from "./provider";
+
 /** Response from Ollama /api/embed endpoint */
 interface OllamaEmbedResponse {
   embeddings: number[][];
@@ -10,7 +12,7 @@ interface OllamaEmbedResponse {
 /**
  * Client for interacting with Ollama's embedding API.
  */
-export class OllamaClient {
+export class OllamaClient implements EmbeddingProvider {
   constructor(
     private baseUrl: string,
     private model: string
@@ -79,5 +81,12 @@ export class OllamaClient {
    */
   setBaseUrl(baseUrl: string): void {
     this.baseUrl = baseUrl;
+  }
+
+  /**
+   * Get a unique key identifying this provider configuration.
+   */
+  getProviderKey(): string {
+    return `ollama:${this.baseUrl}:${this.model}`;
   }
 }

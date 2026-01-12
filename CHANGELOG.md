@@ -4,6 +4,21 @@
 
 ### Added
 
+- **`grep` tool** for text and regex search across vault notes
+  - Search for literal strings or regex patterns
+  - Optional case-sensitive matching (`case_sensitive` parameter)
+  - Scope search to a single file, folder, or entire vault (`path` parameter)
+  - Configurable context lines before/after matches (`context_lines` parameter)
+  - Returns file path, line number, and matching content
+  - Limit results with `max_results` parameter (default: 100)
+
+- **`str_replace` tool** for find-and-replace across vault notes
+  - Replace all occurrences of an exact string (no regex)
+  - Optional case-sensitive matching (`case_sensitive` parameter, default: true)
+  - Scope replacements to a single file, folder, or entire vault (`path` parameter)
+  - Dry-run mode to preview changes without modifying files (`dry_run` parameter)
+  - Reports number of replacements per file
+
 - **Dynamic status bar** showing real-time plugin state
   - Displays active MCP session count (e.g., "F9 MCP | 2 sessions")
   - Shows indexing status when files are being embedded ("indexing..." or "3 pending")

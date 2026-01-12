@@ -83,6 +83,9 @@ No test framework is configured yet.
     - `search` - Semantic vector search across vault notes
     - `reindex_vault` - Force re-embed all files for vector search
     - `refresh_index` - Check for stale files and reindex them
+  - **Text Search**
+    - `grep` - Text/regex search across notes (supports case sensitivity, path scoping, context lines)
+    - `str_replace` - Find and replace strings across notes (supports case sensitivity, path scoping, dry-run)
 
 ### Granular Editing (`src/mcp/structure.ts`, `src/mcp/editors.ts`)
 

@@ -267,7 +267,7 @@ export class ObsidianMcpHost {
     mcp.registerTool(
       "read_note",
       {
-        description: "Read the contents of a note in the current vault",
+        description: "Read the contents of a note in the current vault. If the exact path is not found, attempts fuzzy matching by filename.",
         inputSchema: z.object({
           path: z
             .string()
@@ -278,14 +278,81 @@ export class ObsidianMcpHost {
       async (args) => {
         const { path } = args;
         const normalizedPath = path.replace(/^\/+/, "");
-        const file = this.app.vault.getFileByPath(normalizedPath);
+        let file = this.app.vault.getFileByPath(normalizedPath);
+        let fuzzyMatch = false;
+        let matchedPath: string | undefined;
+
+        if (!file) {
+          // Try fuzzy matching by filename
+          const allFiles = this.app.vault.getMarkdownFiles();
+
+          // Extract the target name without extension
+          const targetName = normalizedPath
+            .split("/").pop()!  // Get filename part
+            .replace(/\.md$/i, "")  // Remove .md extension
+            .toLowerCase();
+
+          // Find best match by comparing filenames (without extensions)
+          let bestMatch: TFile | null = null;
+          let bestScore = 0;
+
+          for (const f of allFiles) {
+            const fileName = f.basename.toLowerCase();
+
+            // Exact filename match (ignoring case and extension)
+            if (fileName === targetName) {
+              bestMatch = f;
+              bestScore = 1000;  // Perfect match
+              break;
+            }
+
+            // Check if filename contains the target or vice versa
+            let score = 0;
+            if (fileName.includes(targetName)) {
+              // Prefer shorter filenames that contain the target (closer match)
+              score = targetName.length / fileName.length * 100;
+            } else if (targetName.includes(fileName)) {
+              score = fileName.length / targetName.length * 50;
+            }
+
+            if (score > bestScore) {
+              bestScore = score;
+              bestMatch = f;
+            }
+          }
+
+          if (bestMatch) {
+            file = bestMatch;
+            fuzzyMatch = true;
+            matchedPath = bestMatch.path;
+          }
+        }
+
         if (!file) {
           return {
             content: [{ type: "text", text: `Note not found: ${normalizedPath}` }],
             isError: true,
           };
         }
+
         const noteContent = await this.app.vault.read(file);
+
+        if (fuzzyMatch) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify({
+                  content: noteContent,
+                  fuzzy_match: true,
+                  requested_path: normalizedPath,
+                  actual_path: matchedPath,
+                }),
+              },
+            ],
+          };
+        }
+
         return {
           content: [{ type: "text", text: noteContent }],
         };

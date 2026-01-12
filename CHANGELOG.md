@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Added
+
+- **Fuzzy filename matching for `read_note` tool**
+  - When exact path is not found, searches all vault files for best filename match
+  - Matches by filename (ignoring path and `.md` extension), e.g., "Friday Core" finds "Prompts/Friday Core.md"
+  - Returns `fuzzy_match: true`, `requested_path`, and `actual_path` in JSON response when fuzzy matched
+  - Exact matches still return plain text content for backwards compatibility
+
 ### Changed
 
 - **HTTPS is now optional** - MCP server can run in HTTP mode (default) or HTTPS mode

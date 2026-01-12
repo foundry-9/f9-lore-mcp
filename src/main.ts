@@ -4,22 +4,22 @@ import { VectorIndexer } from "./vector/indexer";
 import { VectorSearchSettings, DEFAULT_VECTOR_SETTINGS } from "./vector/types";
 
 interface F9ObsidianMCPSettings {
-  sampleSetting: boolean;
   mcpEnabled: boolean;
   mcpPort: number;
   mcpDnsRebindingProtection: boolean;
-  mcpTlsCertPath: string;
-  mcpTlsKeyPath: string;
+  mcpHttpsEnabled: boolean;
+  mcpTlsCert: string;
+  mcpTlsKey: string;
   vectorSearch: VectorSearchSettings;
 }
 
 const DEFAULT_SETTINGS: F9ObsidianMCPSettings = {
-  sampleSetting: true,
   mcpEnabled: false,
   mcpPort: 3030,
   mcpDnsRebindingProtection: true,
-  mcpTlsCertPath: "",
-  mcpTlsKeyPath: "",
+  mcpHttpsEnabled: false,
+  mcpTlsCert: "",
+  mcpTlsKey: "",
   vectorSearch: DEFAULT_VECTOR_SETTINGS,
 };
 
@@ -126,10 +126,13 @@ export default class F9ObsidianMCPPlugin extends Plugin {
         `127.0.0.1:${this.settings.mcpPort}`,
       ],
       enableDnsRebindingProtection: this.settings.mcpDnsRebindingProtection,
-      tls: {
-        certPath: this.settings.mcpTlsCertPath,
-        keyPath: this.settings.mcpTlsKeyPath,
-      },
+      https: this.settings.mcpHttpsEnabled,
+      tls: this.settings.mcpHttpsEnabled
+        ? {
+            cert: this.settings.mcpTlsCert,
+            key: this.settings.mcpTlsKey,
+          }
+        : undefined,
     };
 
     this.mcpHost ??= new ObsidianMcpHost(this.app, cfg, this.vectorIndexer);
@@ -138,8 +141,9 @@ export default class F9ObsidianMCPPlugin extends Plugin {
     if (cfg.enabled) {
       try {
         await this.mcpHost.restart(cfg);
+        const protocol = cfg.https ? "https" : "http";
         console.log(
-          `F9 Obsidian MCP server listening on https://127.0.0.1:${cfg.port}/mcp`
+          `F9 Obsidian MCP server listening on ${protocol}://127.0.0.1:${cfg.port}/mcp`
         );
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
@@ -167,34 +171,21 @@ class F9ObsidianMCPSettingTab extends PluginSettingTab {
     containerEl.createEl("h2", { text: "F9 Obsidian MCP Settings" });
 
     new Setting(containerEl)
-      .setName("Sample toggle")
-      .setDesc("A sample setting to get started.")
-      .addToggle((toggle) =>
-        toggle
-          .setValue(this.plugin.settings.sampleSetting)
-          .onChange(async (value) => {
-            this.plugin.settings.sampleSetting = value;
-            await this.plugin.saveSettings();
-          })
-      );
-
-    new Setting(containerEl)
       .setName("Enable MCP server")
-      .setDesc(
-        "Host an MCP server inside Obsidian (HTTPS on 127.0.0.1). Requires mkcert certificates."
-      )
+      .setDesc("Host an MCP server inside Obsidian on 127.0.0.1")
       .addToggle((toggle) =>
         toggle
           .setValue(this.plugin.settings.mcpEnabled)
           .onChange(async (value) => {
             this.plugin.settings.mcpEnabled = value;
             await this.plugin.saveSettings();
+            this.display(); // Refresh to show/hide conditional settings
           })
       );
 
     new Setting(containerEl)
       .setName("MCP port")
-      .setDesc("Local port for the MCP HTTPS endpoint")
+      .setDesc("Local port for the MCP endpoint")
       .addText((text) =>
         text
           .setPlaceholder("3030")
@@ -210,7 +201,7 @@ class F9ObsidianMCPSettingTab extends PluginSettingTab {
 
     new Setting(containerEl)
       .setName("DNS rebinding protection")
-      .setDesc("Validate Host header for local HTTPS requests")
+      .setDesc("Validate Host header for local requests")
       .addToggle((toggle) =>
         toggle
           .setValue(this.plugin.settings.mcpDnsRebindingProtection)
@@ -221,35 +212,72 @@ class F9ObsidianMCPSettingTab extends PluginSettingTab {
       );
 
     new Setting(containerEl)
-      .setName("TLS certificate file")
-      .setDesc("Path to mkcert certificate (e.g., localhost+1.pem)")
-      .addText((text) =>
-        text
-          .setPlaceholder("/path/to/localhost+1.pem")
-          .setValue(this.plugin.settings.mcpTlsCertPath)
+      .setName("Enable HTTPS")
+      .setDesc("Use HTTPS instead of HTTP. Required for Claude Desktop.")
+      .addToggle((toggle) =>
+        toggle
+          .setValue(this.plugin.settings.mcpHttpsEnabled)
           .onChange(async (value) => {
-            this.plugin.settings.mcpTlsCertPath = value;
+            this.plugin.settings.mcpHttpsEnabled = value;
             await this.plugin.saveSettings();
+            this.display(); // Refresh to show/hide TLS settings
           })
       );
 
-    new Setting(containerEl)
-      .setName("TLS key file")
-      .setDesc("Path to mkcert private key (e.g., localhost+1-key.pem)")
-      .addText((text) =>
-        text
-          .setPlaceholder("/path/to/localhost+1-key.pem")
-          .setValue(this.plugin.settings.mcpTlsKeyPath)
-          .onChange(async (value) => {
-            this.plugin.settings.mcpTlsKeyPath = value;
-            await this.plugin.saveSettings();
-          })
-      );
+    // Only show TLS settings when HTTPS is enabled
+    if (this.plugin.settings.mcpHttpsEnabled) {
+      new Setting(containerEl)
+        .setName("TLS certificate")
+        .setDesc("Paste the contents of your mkcert certificate (PEM format)")
+        .addTextArea((text) =>
+          text
+            .setPlaceholder("-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----")
+            .setValue(this.plugin.settings.mcpTlsCert)
+            .onChange(async (value) => {
+              this.plugin.settings.mcpTlsCert = value;
+              await this.plugin.saveSettings();
+            })
+        )
+        .then((setting) => {
+          const textarea = setting.controlEl.querySelector("textarea");
+          if (textarea) {
+            textarea.style.width = "100%";
+            textarea.style.height = "100px";
+            textarea.style.fontFamily = "monospace";
+            textarea.style.fontSize = "11px";
+          }
+        });
 
-    containerEl.createEl("p", {
-      text: "Generate certificates: mkcert localhost 127.0.0.1",
-      cls: "setting-item-description",
-    });
+      new Setting(containerEl)
+        .setName("TLS private key")
+        .setDesc("Paste the contents of your mkcert private key (PEM format)")
+        .addTextArea((text) =>
+          text
+            .setPlaceholder("-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----")
+            .setValue(this.plugin.settings.mcpTlsKey)
+            .onChange(async (value) => {
+              this.plugin.settings.mcpTlsKey = value;
+              await this.plugin.saveSettings();
+            })
+        )
+        .then((setting) => {
+          const textarea = setting.controlEl.querySelector("textarea");
+          if (textarea) {
+            textarea.style.width = "100%";
+            textarea.style.height = "100px";
+            textarea.style.fontFamily = "monospace";
+            textarea.style.fontSize = "11px";
+          }
+        });
+
+      containerEl.createEl("p", {
+        text: "Generate certificates: mkcert localhost 127.0.0.1",
+        cls: "setting-item-description",
+      });
+    }
+
+    // Claude Desktop Configuration
+    this.renderClaudeDesktopConfig(containerEl);
 
     // Vector Search Settings
     containerEl.createEl("h3", { text: "Vector Search" });
@@ -338,5 +366,99 @@ class F9ObsidianMCPSettingTab extends PluginSettingTab {
           `${stats.fileCount} files, ${stats.chunkCount} chunks indexed using ${stats.model}`
         );
     }
+  }
+
+  /**
+   * Generate a URL-safe slug from the vault name.
+   */
+  private getVaultSlug(): string {
+    const vaultName = this.app.vault.getName();
+    return vaultName
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "");
+  }
+
+  /**
+   * Generate the Claude Desktop configuration JSON.
+   */
+  private generateClaudeDesktopConfig(): string {
+    const vaultSlug = this.getVaultSlug();
+    const protocol = this.plugin.settings.mcpHttpsEnabled ? "https" : "http";
+    const port = this.plugin.settings.mcpPort;
+    const mcpUrl = `${protocol}://localhost:${port}/mcp`;
+
+    interface ConfigEntry {
+      command: string;
+      args: string[];
+      env?: Record<string, string>;
+    }
+
+    const config: ConfigEntry = {
+      command: "npx",
+      args: ["-y", "mcp-remote", mcpUrl],
+    };
+
+    // Add NODE_TLS_REJECT_UNAUTHORIZED for HTTPS with self-signed certs
+    if (this.plugin.settings.mcpHttpsEnabled) {
+      config.env = {
+        NODE_TLS_REJECT_UNAUTHORIZED: "0",
+      };
+    }
+
+    // Format as a single entry that can be added to mcpServers
+    const wrapper: Record<string, ConfigEntry> = {};
+    wrapper[`f9-obsidian-${vaultSlug}`] = config;
+
+    return JSON.stringify(wrapper, null, 2);
+  }
+
+  /**
+   * Render the Claude Desktop configuration section.
+   */
+  private renderClaudeDesktopConfig(containerEl: HTMLElement): void {
+    containerEl.createEl("h3", { text: "Claude Desktop Configuration" });
+
+    const protocol = this.plugin.settings.mcpHttpsEnabled ? "https" : "http";
+    const port = this.plugin.settings.mcpPort;
+
+    containerEl.createEl("p", {
+      text: `MCP endpoint: ${protocol}://localhost:${port}/mcp`,
+      cls: "setting-item-description",
+    });
+
+    const configJson = this.generateClaudeDesktopConfig();
+
+    new Setting(containerEl)
+      .setName("claude_desktop_config.json snippet")
+      .setDesc("Add this to your Claude Desktop config file under \"mcpServers\"")
+      .addButton((btn) =>
+        btn
+          .setButtonText("Copy")
+          .setCta()
+          .onClick(() => {
+            navigator.clipboard.writeText(configJson);
+            new Notice("Configuration copied to clipboard");
+          })
+      );
+
+    // Display the config in a read-only textarea
+    const configDisplay = containerEl.createEl("textarea", {
+      text: configJson,
+      cls: "f9-mcp-config-display",
+    });
+    configDisplay.readOnly = true;
+    configDisplay.style.width = "100%";
+    configDisplay.style.height = "140px";
+    configDisplay.style.fontFamily = "monospace";
+    configDisplay.style.fontSize = "11px";
+    configDisplay.style.marginBottom = "1em";
+    configDisplay.style.resize = "vertical";
+
+    // Add terminal command hint
+    containerEl.createEl("p", {
+      text: `Or run directly: npx -y mcp-remote ${protocol}://localhost:${port}/mcp`,
+      cls: "setting-item-description",
+    });
   }
 }

@@ -1,8 +1,7 @@
 import type { App, TFile, TFolder } from "obsidian";
 import { z } from "zod";
-import { createServer, IncomingMessage, ServerResponse, ServerOptions } from "node:https";
-import type { Server } from "node:http";
-import { readFileSync, existsSync } from "node:fs";
+import { createServer as createHttpsServer, ServerOptions as HttpsServerOptions } from "node:https";
+import { createServer as createHttpServer, IncomingMessage, ServerResponse, Server } from "node:http";
 import { randomUUID } from "node:crypto";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
@@ -36,9 +35,10 @@ export interface McpConfig {
   allowedHosts?: string[];
   allowedOrigins?: string[];
   enableDnsRebindingProtection?: boolean;
+  https?: boolean;
   tls?: {
-    certPath: string;
-    keyPath: string;
+    cert: string;
+    key: string;
   };
 }
 
@@ -1540,29 +1540,20 @@ export class ObsidianMcpHost {
     if (this.isRunning()) return;
     if (!this.config.enabled) return;
 
-    const { port } = this.config;
+    const { port, https: useHttps } = this.config;
 
-    // Validate TLS configuration
-    if (!this.config.tls) {
-      throw new Error("TLS configuration is required. Please configure certificate paths in settings.");
-    }
-    if (!this.config.tls.certPath || !this.config.tls.keyPath) {
-      throw new Error("TLS certificate and key paths are required. Please configure them in settings.");
-    }
-    if (!existsSync(this.config.tls.certPath)) {
-      throw new Error(`TLS certificate file not found: ${this.config.tls.certPath}`);
-    }
-    if (!existsSync(this.config.tls.keyPath)) {
-      throw new Error(`TLS key file not found: ${this.config.tls.keyPath}`);
+    // Validate TLS configuration if HTTPS is enabled
+    if (useHttps) {
+      if (!this.config.tls) {
+        throw new Error("TLS configuration is required for HTTPS. Please configure certificate content in settings.");
+      }
+      if (!this.config.tls.cert || !this.config.tls.key) {
+        throw new Error("TLS certificate and key content are required for HTTPS. Please configure them in settings.");
+      }
     }
 
-    // Create HTTPS server with TLS options
-    const tlsOptions: ServerOptions = {
-      cert: readFileSync(this.config.tls.certPath),
-      key: readFileSync(this.config.tls.keyPath),
-    };
-
-    const server = createServer(tlsOptions, async (req: IncomingMessage, res: ServerResponse) => {
+    // Request handler shared by HTTP and HTTPS
+    const requestHandler = async (req: IncomingMessage, res: ServerResponse) => {
       try {
         const url = req.url || "/";
         if (url === "/mcp") {
@@ -1653,7 +1644,21 @@ export class ObsidianMcpHost {
         res.writeHead(500, { "content-type": "application/json" });
         res.end(JSON.stringify({ error: message }));
       }
-    });
+    };
+
+    // Create HTTP or HTTPS server based on configuration
+    let server: Server;
+    const protocol = useHttps ? "https" : "http";
+
+    if (useHttps && this.config.tls) {
+      const tlsOptions: HttpsServerOptions = {
+        cert: this.config.tls.cert,
+        key: this.config.tls.key,
+      };
+      server = createHttpsServer(tlsOptions, requestHandler);
+    } else {
+      server = createHttpServer(requestHandler);
+    }
 
     await new Promise<void>((resolve, reject) => {
       server.once("error", (e) => reject(e));
@@ -1661,7 +1666,7 @@ export class ObsidianMcpHost {
     });
 
     this.httpServer = server;
-    console.log(`[F9 MCP] Server started on https://127.0.0.1:${port}/mcp (multi-session v2 - ${new Date().toISOString()})`);
+    console.log(`[F9 MCP] Server started on ${protocol}://127.0.0.1:${port}/mcp (multi-session v2 - ${new Date().toISOString()})`);
   }
 
   async stop(): Promise<void> {

@@ -2,6 +2,31 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **HTTPS is now optional** - MCP server can run in HTTP mode (default) or HTTPS mode
+  - New "Enable HTTPS" toggle in settings
+  - HTTP mode is simpler to configure and works with clients that don't require TLS
+  - HTTPS mode still available for Claude Desktop and other clients requiring trusted TLS
+- **TLS configuration uses inline content instead of file paths**
+  - Certificate and key content are pasted directly into settings textareas
+  - Eliminates file path issues and makes configuration more portable
+  - TLS settings only appear when HTTPS is enabled
+
+### Added
+
+- **Claude Desktop configuration snippet** in settings
+  - Shows copyable JSON config for `claude_desktop_config.json`
+  - Automatically uses vault name as slug (e.g., `f9-obsidian-my-vault`)
+  - Includes correct protocol (http/https) and port from settings
+  - Adds `NODE_TLS_REJECT_UNAUTHORIZED=0` env var when HTTPS is enabled
+  - Copy button for easy clipboard access
+  - Shows direct `npx mcp-remote` command as alternative
+
+### Removed
+
+- Sample toggle setting (unused boilerplate from plugin template)
+
 ### Fixed
 
 - Remove dots from tool names to fix Claude Desktop compatibility

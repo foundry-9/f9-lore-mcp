@@ -43,11 +43,12 @@ No test framework is configured yet.
   - Sessions managed via `Map<sessionId, McpSession>`
   - Routing based on `mcp-session-id` request header
   - New sessions created on-demand for POST requests without valid session ID
-- Uses `StreamableHTTPServerTransport` for HTTPS/SSE transport
-- Requires mkcert-generated TLS certificates for localhost
+- Uses `StreamableHTTPServerTransport` for HTTP/HTTPS + SSE transport
+- Supports both HTTP (default) and HTTPS modes
+- HTTPS mode requires TLS certificate content pasted into settings
 - Listens on `127.0.0.1:<port>` with endpoints:
-  - `/mcp` - MCP protocol endpoint (HTTPS, multi-session)
-  - `/health` - Health check (HTTPS, reports session count)
+  - `/mcp` - MCP protocol endpoint (HTTP or HTTPS, multi-session)
+  - `/health` - Health check (reports session count)
 - Tools are registered via `McpServer.registerTool()` with Zod schemas for validation
 - **Zod Schema Constraints**: Some Zod types fail when the MCP SDK converts them to JSON Schema in Obsidian's bundled environment:
   - ❌ **Avoid**: `z.any()`, `z.unknown()`, `z.record(z.any())`, `z.record(z.unknown())`

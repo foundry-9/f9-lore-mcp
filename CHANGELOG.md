@@ -4,9 +4,12 @@
 
 ### Fixed
 
+- Remove dots from tool names to fix Claude Desktop compatibility
+  - Claude Desktop's frontend validation requires tool names to match `^[a-zA-Z0-9_-]{1,64}$`
+  - Removed `obsidian.` prefix from all tools (e.g., `obsidian.ping` → `ping`)
 - Fix `tools/list` failing in Obsidian's bundled environment due to Zod schema serialization issue
   - `z.record(z.any())` and `z.record(z.unknown())` fail to convert to JSON schema when bundled with esbuild for Obsidian
-  - Changed `obsidian.update_frontmatter` tool's `updates` field from `z.record(z.any())` to `z.record(z.string(), z.string())`
+  - Changed `update_frontmatter` tool's `updates` field from `z.record(z.any())` to `z.record(z.string(), z.string())`
   - Frontmatter values are now JSON-stringified; use `'null'` string to delete a key
 
 ### Added
@@ -27,36 +30,36 @@
   - Clear error messages via Obsidian Notice when TLS configuration is invalid
 
 - **Granular markdown editing tools** for token-efficient note editing
-  - `obsidian.get_note_structure` - Get structural overview (headings, sections, list items, frontmatter) with freshness token
-  - `obsidian.read_section` - Read specific section content by ID
-  - `obsidian.read_heading_content` - Read all content under a heading
-  - `obsidian.read_frontmatter` - Read frontmatter as structured JSON
-  - `obsidian.update_section` - Update a section's content
-  - `obsidian.delete_section` - Delete a section from a note
-  - `obsidian.update_heading_content` - Update content under a heading (with subheading preservation option)
-  - `obsidian.rename_heading` - Rename a heading (change text and/or level)
-  - `obsidian.update_list_item` - Update list item text and/or task status
-  - `obsidian.update_frontmatter` - Update frontmatter properties (merge or replace)
-  - `obsidian.insert_content` - Insert content at specific positions (after/before section, under heading, at line, at start/end)
+  - `get_note_structure` - Get structural overview (headings, sections, list items, frontmatter) with freshness token
+  - `read_section` - Read specific section content by ID
+  - `read_heading_content` - Read all content under a heading
+  - `read_frontmatter` - Read frontmatter as structured JSON
+  - `update_section` - Update a section's content
+  - `delete_section` - Delete a section from a note
+  - `update_heading_content` - Update content under a heading (with subheading preservation option)
+  - `rename_heading` - Rename a heading (change text and/or level)
+  - `update_list_item` - Update list item text and/or task status
+  - `update_frontmatter` - Update frontmatter properties (merge or replace)
+  - `insert_content` - Insert content at specific positions (after/before section, under heading, at line, at start/end)
   - Freshness tokens for staleness detection to prevent conflicting edits
   - Post-write verification to confirm changes were applied correctly
 - **Vector search with local Ollama embeddings**
   - Automatic embedding of markdown files on create/modify/delete/rename events
   - Fixed-size chunking (~500 tokens) with overlap for better search granularity
   - Staleness detection on plugin startup to reindex modified files
-  - `obsidian.search` tool for semantic vector search across vault notes
-  - `obsidian.reindex_vault` tool to force re-embed all files
-  - `obsidian.refresh_index` tool to check for stale files and reindex them
+  - `search` tool for semantic vector search across vault notes
+  - `reindex_vault` tool to force re-embed all files
+  - `refresh_index` tool to check for stale files and reindex them
   - Settings UI for Ollama URL, model selection, auto-indexing toggle, and manual reindex
   - Embeddings stored in plugin data.json (syncs with vault)
-- `obsidian.list_folders` tool to list folders in the vault (with optional parent folder filter)
-- `obsidian.list_notes` tool to list notes in the vault (with optional folder filter)
-- `obsidian.read_note` tool to read the contents of a note
-- `obsidian.update_note` tool to update the contents of an existing note
-- `obsidian.create_folder` tool to create folders (with intermediate folder creation)
-- `obsidian.delete_folder` tool to delete folders (with `delete_if_not_empty` option)
-- `obsidian.move_or_rename_note` tool to move or rename notes within the vault
-- `obsidian.delete_note` tool to delete notes (moves to system trash)
+- `list_folders` tool to list folders in the vault (with optional parent folder filter)
+- `list_notes` tool to list notes in the vault (with optional folder filter)
+- `read_note` tool to read the contents of a note
+- `update_note` tool to update the contents of an existing note
+- `create_folder` tool to create folders (with intermediate folder creation)
+- `delete_folder` tool to delete folders (with `delete_if_not_empty` option)
+- `move_or_rename_note` tool to move or rename notes within the vault
+- `delete_note` tool to delete notes (moves to system trash)
 
 ### Changed
 

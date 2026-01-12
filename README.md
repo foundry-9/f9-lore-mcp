@@ -39,13 +39,13 @@ curl -N -H 'Accept: text/event-stream' \
   http://127.0.0.1:3030/mcp
 # In another shell, POST a ping request:
 curl -X POST -H 'Content-Type: application/json' \
-  --data '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"obsidian.ping"}}' \
+  --data '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"ping"}}' \
   http://127.0.0.1:3030/mcp
 ```
 
 Currently available tools
-- `obsidian.ping` → returns a text “pong from Obsidian”.
-- `obsidian.create_note` → args: `{ path: string, content?: string }`.
+- `ping` → returns a text “pong from Obsidian”.
+- `create_note` → args: `{ path: string, content?: string }`.
 
 ## Versioning
 

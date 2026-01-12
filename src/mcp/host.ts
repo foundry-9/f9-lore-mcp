@@ -154,13 +154,13 @@ export class ObsidianMcpHost {
    */
   private registerTools(mcp: McpServer): void {
     // Register simple ping tool
-    mcp.registerTool("obsidian.ping", {}, async () => ({
+    mcp.registerTool("ping", {}, async () => ({
       content: [{ type: "text", text: "pong from Obsidian" }],
     }));
 
     // Register list folders tool
     mcp.registerTool(
-      "obsidian.list_folders",
+      "list_folders",
       {
         description: "List folders in the vault, optionally filtered by parent folder",
         inputSchema: z.object({
@@ -199,7 +199,7 @@ export class ObsidianMcpHost {
 
     // Register list notes tool
     mcp.registerTool(
-      "obsidian.list_notes",
+      "list_notes",
       {
         description: "List notes in the vault, optionally filtered by folder",
         inputSchema: z.object({
@@ -228,7 +228,7 @@ export class ObsidianMcpHost {
 
     // Register note creation tool
     mcp.registerTool(
-      "obsidian.create_note",
+      "create_note",
       {
         description: "Create a note in the current vault",
         inputSchema: z.object({
@@ -265,7 +265,7 @@ export class ObsidianMcpHost {
 
     // Register note reading tool
     mcp.registerTool(
-      "obsidian.read_note",
+      "read_note",
       {
         description: "Read the contents of a note in the current vault",
         inputSchema: z.object({
@@ -294,7 +294,7 @@ export class ObsidianMcpHost {
 
     // Register note update tool
     mcp.registerTool(
-      "obsidian.update_note",
+      "update_note",
       {
         description: "Update the contents of an existing note in the current vault",
         inputSchema: z.object({
@@ -324,7 +324,7 @@ export class ObsidianMcpHost {
 
     // Register note deletion tool
     mcp.registerTool(
-      "obsidian.delete_note",
+      "delete_note",
       {
         description: "Delete a note from the current vault (moves to system trash)",
         inputSchema: z.object({
@@ -353,7 +353,7 @@ export class ObsidianMcpHost {
 
     // Register note move/rename tool
     mcp.registerTool(
-      "obsidian.move_or_rename_note",
+      "move_or_rename_note",
       {
         description: "Move or rename a note in the current vault",
         inputSchema: z.object({
@@ -401,7 +401,7 @@ export class ObsidianMcpHost {
 
     // Register folder creation tool
     mcp.registerTool(
-      "obsidian.create_folder",
+      "create_folder",
       {
         description: "Create a folder in the current vault (creates intermediate folders as needed)",
         inputSchema: z.object({
@@ -429,7 +429,7 @@ export class ObsidianMcpHost {
 
     // Register folder deletion tool
     mcp.registerTool(
-      "obsidian.delete_folder",
+      "delete_folder",
       {
         description: "Delete a folder from the current vault (moves to system trash)",
         inputSchema: z.object({
@@ -485,7 +485,7 @@ export class ObsidianMcpHost {
 
     // Register get note structure tool
     mcp.registerTool(
-      "obsidian.get_note_structure",
+      "get_note_structure",
       {
         description:
           "Get the structural overview of a note (headings, sections, list items, frontmatter) with a freshness token for subsequent edits. Returns metadata without full content for token efficiency.",
@@ -539,7 +539,7 @@ export class ObsidianMcpHost {
 
     // Register read section tool
     mcp.registerTool(
-      "obsidian.read_section",
+      "read_section",
       {
         description: "Read the full content of a specific section by ID (from get_note_structure)",
         inputSchema: z.object({
@@ -619,7 +619,7 @@ export class ObsidianMcpHost {
 
     // Register read heading content tool
     mcp.registerTool(
-      "obsidian.read_heading_content",
+      "read_heading_content",
       {
         description:
           "Read all content under a heading (until the next heading of same or higher level)",
@@ -701,7 +701,7 @@ export class ObsidianMcpHost {
 
     // Register read frontmatter tool
     mcp.registerTool(
-      "obsidian.read_frontmatter",
+      "read_frontmatter",
       {
         description: "Read frontmatter (YAML) from a note as structured JSON",
         inputSchema: z.object({
@@ -784,7 +784,7 @@ export class ObsidianMcpHost {
 
     // Register update section tool
     mcp.registerTool(
-      "obsidian.update_section",
+      "update_section",
       {
         description: "Update the content of a specific section",
         inputSchema: z.object({
@@ -855,7 +855,7 @@ export class ObsidianMcpHost {
 
     // Register delete section tool
     mcp.registerTool(
-      "obsidian.delete_section",
+      "delete_section",
       {
         description: "Delete a section from a note",
         inputSchema: z.object({
@@ -921,7 +921,7 @@ export class ObsidianMcpHost {
 
     // Register update heading content tool
     mcp.registerTool(
-      "obsidian.update_heading_content",
+      "update_heading_content",
       {
         description: "Update all content under a heading (until next same/higher level heading)",
         inputSchema: z.object({
@@ -993,7 +993,7 @@ export class ObsidianMcpHost {
 
     // Register rename heading tool
     mcp.registerTool(
-      "obsidian.rename_heading",
+      "rename_heading",
       {
         description: "Rename a heading (change text and/or level)",
         inputSchema: z.object({
@@ -1066,7 +1066,7 @@ export class ObsidianMcpHost {
 
     // Register update list item tool
     mcp.registerTool(
-      "obsidian.update_list_item",
+      "update_list_item",
       {
         description: "Update a list item's text and/or task status",
         inputSchema: z.object({
@@ -1172,7 +1172,7 @@ export class ObsidianMcpHost {
 
     // Register update frontmatter tool
     mcp.registerTool(
-      "obsidian.update_frontmatter",
+      "update_frontmatter",
       {
         description: "Update frontmatter properties. Use null as a value to delete a key.",
         inputSchema: z.object({
@@ -1245,7 +1245,7 @@ export class ObsidianMcpHost {
 
     // Register insert content tool
     mcp.registerTool(
-      "obsidian.insert_content",
+      "insert_content",
       {
         description: "Insert content at a specific position in a note",
         inputSchema: z.object({
@@ -1323,7 +1323,7 @@ export class ObsidianMcpHost {
 
     // Register vector search refresh tool (check for stale files)
     mcp.registerTool(
-      "obsidian.refresh_index",
+      "refresh_index",
       {
         description: "Check for new or modified files and update the vector index (same as startup check)",
         inputSchema: z.object({}),
@@ -1376,7 +1376,7 @@ export class ObsidianMcpHost {
 
     // Register vector search reindex tool
     mcp.registerTool(
-      "obsidian.reindex_vault",
+      "reindex_vault",
       {
         description: "Force re-embed all markdown files in the vault for vector search",
         inputSchema: z.object({}),
@@ -1427,7 +1427,7 @@ export class ObsidianMcpHost {
 
     // Register vector search tool
     mcp.registerTool(
-      "obsidian.search",
+      "search",
       {
         description: "Semantic vector search across vault notes using embeddings",
         inputSchema: z.object({
@@ -1457,7 +1457,7 @@ export class ObsidianMcpHost {
               content: [
                 {
                   type: "text",
-                  text: "No results found. The vault may need to be indexed first (use obsidian.reindex_vault).",
+                  text: "No results found. The vault may need to be indexed first (use reindex_vault).",
                 },
               ],
             };

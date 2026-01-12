@@ -56,32 +56,32 @@ No test framework is configured yet.
   - When adding new tools, test that `tools/list` still works after reloading Obsidian
 - Current tools:
   - **Basic Operations**
-    - `obsidian.ping` - Simple ping/pong health check
-    - `obsidian.list_folders` - List folders in the vault
-    - `obsidian.list_notes` - List notes in the vault
-    - `obsidian.create_note` - Create a note
-    - `obsidian.read_note` - Read note contents
-    - `obsidian.update_note` - Update note contents (full file replacement)
-    - `obsidian.delete_note` - Delete a note (moves to trash)
-    - `obsidian.move_or_rename_note` - Move or rename a note
-    - `obsidian.create_folder` - Create a folder
-    - `obsidian.delete_folder` - Delete a folder (moves to trash)
+    - `ping` - Simple ping/pong health check
+    - `list_folders` - List folders in the vault
+    - `list_notes` - List notes in the vault
+    - `create_note` - Create a note
+    - `read_note` - Read note contents
+    - `update_note` - Update note contents (full file replacement)
+    - `delete_note` - Delete a note (moves to trash)
+    - `move_or_rename_note` - Move or rename a note
+    - `create_folder` - Create a folder
+    - `delete_folder` - Delete a folder (moves to trash)
   - **Granular Structure Tools** (token-efficient editing)
-    - `obsidian.get_note_structure` - Get headings, sections, list items, frontmatter with freshness token
-    - `obsidian.read_section` - Read specific section content by ID
-    - `obsidian.read_heading_content` - Read content under a heading
-    - `obsidian.read_frontmatter` - Read frontmatter as JSON
-    - `obsidian.update_section` - Update section content
-    - `obsidian.delete_section` - Delete a section
-    - `obsidian.update_heading_content` - Update content under heading
-    - `obsidian.rename_heading` - Rename heading text/level
-    - `obsidian.update_list_item` - Update list item text/task status
-    - `obsidian.update_frontmatter` - Update frontmatter properties
-    - `obsidian.insert_content` - Insert at specific position
+    - `get_note_structure` - Get headings, sections, list items, frontmatter with freshness token
+    - `read_section` - Read specific section content by ID
+    - `read_heading_content` - Read content under a heading
+    - `read_frontmatter` - Read frontmatter as JSON
+    - `update_section` - Update section content
+    - `delete_section` - Delete a section
+    - `update_heading_content` - Update content under heading
+    - `rename_heading` - Rename heading text/level
+    - `update_list_item` - Update list item text/task status
+    - `update_frontmatter` - Update frontmatter properties
+    - `insert_content` - Insert at specific position
   - **Vector Search**
-    - `obsidian.search` - Semantic vector search across vault notes
-    - `obsidian.reindex_vault` - Force re-embed all files for vector search
-    - `obsidian.refresh_index` - Check for stale files and reindex them
+    - `search` - Semantic vector search across vault notes
+    - `reindex_vault` - Force re-embed all files for vector search
+    - `refresh_index` - Check for stale files and reindex them
 
 ### Granular Editing (`src/mcp/structure.ts`, `src/mcp/editors.ts`)
 

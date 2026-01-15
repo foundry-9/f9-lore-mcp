@@ -38,6 +38,29 @@
   - Returns `fuzzy_match: true`, `requested_path`, and `actual_path` in JSON response when fuzzy matched
   - Exact matches still return plain text content for backwards compatibility
 
+- **Client-based session cleanup**
+  - When a client reconnects, any existing sessions from the same client are automatically closed
+  - Client identity determined by IP address + User-Agent header combination
+  - Prevents session accumulation from reconnecting clients (Claude Desktop, mcp-remote, etc.)
+  - Logged when stale sessions are cleaned up
+
+- **Configurable session timeout**
+  - Sessions that haven't received requests are automatically closed after the configured timeout
+  - Default timeout: 30 minutes (configurable in settings)
+  - Background cleanup runs every 5 minutes
+  - Prevents orphaned sessions from accumulating memory
+
+- **Debounced server restart on configuration changes**
+  - MCP server restarts are debounced by 2 seconds when settings change
+  - Prevents rapid restarts when adjusting multiple settings quickly
+  - Applies to port, HTTPS, TLS, session timeout, and other server configuration
+
+- **Per-vault settings storage**
+  - Settings are now keyed by vault name in `data.json`
+  - Multiple vaults can share the same plugin folder (e.g., symlinked for development) without overwriting each other's settings
+  - Each vault can have its own port, HTTPS config, etc.
+  - Existing settings are automatically migrated on first load
+
 ### Changed
 
 - **Refactored embedding system to use provider abstraction**

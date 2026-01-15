@@ -10,7 +10,16 @@ interface F9ObsidianMCPSettings {
   mcpHttpsEnabled: boolean;
   mcpTlsCert: string;
   mcpTlsKey: string;
+  mcpSessionTimeoutMinutes: number;
   vectorSearch: VectorSearchSettings;
+}
+
+/**
+ * Storage format for plugin data.
+ * Settings are keyed by vault name to support multiple vaults sharing the same plugin folder.
+ */
+interface PluginData {
+  vaults: Record<string, F9ObsidianMCPSettings>;
 }
 
 const DEFAULT_SETTINGS: F9ObsidianMCPSettings = {
@@ -20,14 +29,18 @@ const DEFAULT_SETTINGS: F9ObsidianMCPSettings = {
   mcpHttpsEnabled: false,
   mcpTlsCert: "",
   mcpTlsKey: "",
+  mcpSessionTimeoutMinutes: 30,
   vectorSearch: DEFAULT_VECTOR_SETTINGS,
 };
+
+const MCP_RESTART_DEBOUNCE_MS = 2000;
 
 export default class F9ObsidianMCPPlugin extends Plugin {
   settings!: F9ObsidianMCPSettings;
   private mcpHost?: ObsidianMcpHost;
   vectorIndexer?: VectorIndexer;
   private statusBarItem?: HTMLElement;
+  private mcpRestartTimer?: ReturnType<typeof setTimeout>;
 
   async onload() {
     console.log("Loading plugin: F9 Obsidian MCP");
@@ -112,15 +125,71 @@ export default class F9ObsidianMCPPlugin extends Plugin {
 
   onunload() {
     console.log("Unloading plugin: F9 Obsidian MCP");
+    if (this.mcpRestartTimer) {
+      clearTimeout(this.mcpRestartTimer);
+      this.mcpRestartTimer = undefined;
+    }
+  }
+
+  /**
+   * Get the current vault's name for use as a settings key.
+   */
+  private getVaultKey(): string {
+    return this.app.vault.getName();
   }
 
   async loadSettings() {
-    this.settings = { ...DEFAULT_SETTINGS, ...await this.loadData()};
+    const rawData = await this.loadData();
+    const vaultKey = this.getVaultKey();
+
+    // Check if data is in new format (has 'vaults' key)
+    if (rawData && typeof rawData === "object" && "vaults" in rawData) {
+      const pluginData = rawData as PluginData;
+      this.settings = { ...DEFAULT_SETTINGS, ...pluginData.vaults[vaultKey] };
+    } else if (rawData && typeof rawData === "object") {
+      // Migrate from old format: existing settings become this vault's settings
+      const oldSettings = rawData as Partial<F9ObsidianMCPSettings>;
+      this.settings = { ...DEFAULT_SETTINGS, ...oldSettings };
+      // Save in new format immediately to complete migration
+      await this.saveSettings();
+      console.log(`[F9 MCP] Migrated settings to vault-keyed format for: ${vaultKey}`);
+    } else {
+      this.settings = { ...DEFAULT_SETTINGS };
+    }
   }
 
   async saveSettings() {
-    await this.saveData(this.settings);
-    await this.ensureMcpRunning();
+    const vaultKey = this.getVaultKey();
+    const rawData = await this.loadData();
+
+    // Load existing plugin data or create new structure
+    let pluginData: PluginData;
+    if (rawData && typeof rawData === "object" && "vaults" in rawData) {
+      pluginData = rawData as PluginData;
+    } else {
+      pluginData = { vaults: {} };
+    }
+
+    // Save this vault's settings
+    pluginData.vaults[vaultKey] = this.settings;
+    await this.saveData(pluginData);
+    this.scheduleMcpRestart();
+  }
+
+  /**
+   * Schedule an MCP server restart with debouncing.
+   * Multiple rapid config changes will only trigger one restart after the debounce period.
+   */
+  private scheduleMcpRestart(): void {
+    if (this.mcpRestartTimer) {
+      clearTimeout(this.mcpRestartTimer);
+    }
+    this.mcpRestartTimer = setTimeout(() => {
+      this.mcpRestartTimer = undefined;
+      this.ensureMcpRunning().catch((err) => {
+        console.error("[F9 MCP] Error during scheduled restart:", err);
+      });
+    }, MCP_RESTART_DEBOUNCE_MS);
   }
 
   private async ensureMcpRunning() {
@@ -139,6 +208,7 @@ export default class F9ObsidianMCPPlugin extends Plugin {
             key: this.settings.mcpTlsKey,
           }
         : undefined,
+      sessionTimeoutMinutes: this.settings.mcpSessionTimeoutMinutes,
     };
 
     this.mcpHost ??= new ObsidianMcpHost(this.app, cfg, this.vectorIndexer);
@@ -242,6 +312,22 @@ class F9ObsidianMCPSettingTab extends PluginSettingTab {
           .onChange(async (value) => {
             this.plugin.settings.mcpDnsRebindingProtection = value;
             await this.plugin.saveSettings();
+          })
+      );
+
+    new Setting(containerEl)
+      .setName("Session timeout (minutes)")
+      .setDesc("Inactive sessions are automatically closed after this duration")
+      .addText((text) =>
+        text
+          .setPlaceholder("30")
+          .setValue(String(this.plugin.settings.mcpSessionTimeoutMinutes))
+          .onChange(async (val) => {
+            const parsed = Number(val);
+            if (!Number.isNaN(parsed) && parsed > 0) {
+              this.plugin.settings.mcpSessionTimeoutMinutes = parsed;
+              await this.plugin.saveSettings();
+            }
           })
       );
 

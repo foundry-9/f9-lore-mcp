@@ -40,13 +40,19 @@ export interface McpConfig {
     cert: string;
     key: string;
   };
+  sessionTimeoutMinutes?: number;
 }
 
 interface McpSession {
   mcp: McpServer;
   transport: StreamableHTTPServerTransport;
   createdAt: number;
+  clientKey: string;
+  lastActivity: number;
 }
+
+const SESSION_CLEANUP_INTERVAL_MS = 5 * 60 * 1000; // Check for expired sessions every 5 minutes
+const DEFAULT_SESSION_TIMEOUT_MINUTES = 30;
 
 export class ObsidianMcpHost {
   private app: App;
@@ -54,6 +60,7 @@ export class ObsidianMcpHost {
   private httpServer?: Server;
   private sessions: Map<string, McpSession> = new Map();
   private vectorIndexer?: VectorIndexer;
+  private cleanupInterval?: ReturnType<typeof setInterval>;
 
   constructor(app: App, config: McpConfig, vectorIndexer?: VectorIndexer) {
     this.app = app;
@@ -1894,9 +1901,68 @@ export class ObsidianMcpHost {
   }
 
   /**
+   * Compute a unique client identity key from the request.
+   * Combines IP address and User-Agent header for localhost differentiation.
+   */
+  private getClientKey(req: IncomingMessage): string {
+    const ip = req.socket?.remoteAddress || "unknown";
+    const userAgent = (req.headers["user-agent"] || "").trim();
+    return `${ip}:${userAgent}`;
+  }
+
+  /**
+   * Close and remove all sessions belonging to a specific client.
+   * Called when a new session is created to ensure only one session per client.
+   */
+  private async cleanupClientSessions(clientKey: string): Promise<void> {
+    const sessionsToClose: string[] = [];
+
+    for (const [sessionId, session] of this.sessions) {
+      if (session.clientKey === clientKey) {
+        sessionsToClose.push(sessionId);
+      }
+    }
+
+    if (sessionsToClose.length > 0) {
+      const truncatedKey = clientKey.length > 60 ? clientKey.substring(0, 60) + "..." : clientKey;
+      console.log(`[F9 MCP] Cleaning up ${sessionsToClose.length} stale session(s) for client: ${truncatedKey}`);
+
+      for (const sessionId of sessionsToClose) {
+        await this.closeSession(sessionId);
+      }
+    }
+  }
+
+  /**
+   * Remove sessions that have been inactive beyond the configured TTL.
+   */
+  private async cleanupExpiredSessions(): Promise<void> {
+    const timeoutMs = (this.config.sessionTimeoutMinutes ?? DEFAULT_SESSION_TIMEOUT_MINUTES) * 60 * 1000;
+    const now = Date.now();
+    const expiredSessions: string[] = [];
+
+    for (const [sessionId, session] of this.sessions) {
+      if (now - session.lastActivity > timeoutMs) {
+        expiredSessions.push(sessionId);
+      }
+    }
+
+    if (expiredSessions.length > 0) {
+      console.log(`[F9 MCP] Cleaning up ${expiredSessions.length} expired session(s) (timeout: ${this.config.sessionTimeoutMinutes ?? DEFAULT_SESSION_TIMEOUT_MINUTES} min)`);
+      for (const sessionId of expiredSessions) {
+        await this.closeSession(sessionId);
+      }
+    }
+  }
+
+  /**
    * Create a new MCP session with its own server and transport.
    */
-  private async createSession(): Promise<{ sessionId: string; session: McpSession }> {
+  private async createSession(req: IncomingMessage): Promise<{ sessionId: string; session: McpSession }> {
+    const clientKey = this.getClientKey(req);
+
+    // Clean up any existing sessions from this client
+    await this.cleanupClientSessions(clientKey);
     const mcp = new McpServer(
       { name: "F9 Obsidian MCP", version: "1.0.0" },
       { capabilities: { tools: { listChanged: true } } }
@@ -1916,10 +1982,13 @@ export class ObsidianMcpHost {
     await mcp.connect(transport);
     console.log(`[F9 MCP] Connected`);
 
+    const now = Date.now();
     const session: McpSession = {
       mcp,
       transport,
-      createdAt: Date.now(),
+      createdAt: now,
+      clientKey,
+      lastActivity: now,
     };
 
     this.sessions.set(sessionId, session);
@@ -1970,6 +2039,7 @@ export class ObsidianMcpHost {
             // Route to existing session
             console.log(`[F9 MCP] Routing to existing session: ${sessionId}`);
             const session = this.sessions.get(sessionId)!;
+            session.lastActivity = Date.now(); // Update activity timestamp
             try {
               await session.transport.handleRequest(req, res);
               console.log(`[F9 MCP] Request handled successfully for session: ${sessionId}`);
@@ -1980,7 +2050,7 @@ export class ObsidianMcpHost {
           } else if (req.method === "POST") {
             // Create new session for POST without valid session ID
             console.log(`[F9 MCP] Creating new session for POST request`);
-            const { sessionId: newSessionId, session } = await this.createSession();
+            const { sessionId: newSessionId, session } = await this.createSession(req);
             console.log(`[F9 MCP] Handling request with new session: ${newSessionId}`);
             try {
               await session.transport.handleRequest(req, res);
@@ -2007,8 +2077,26 @@ export class ObsidianMcpHost {
             res.end(JSON.stringify({ error: "Invalid session or method" }));
           }
         } else if (url === "/health") {
+          const sessionList = [];
+          for (const [sessionId, session] of this.sessions) {
+            // clientKey format is "ip:userAgent"
+            const colonIndex = session.clientKey.indexOf(":");
+            const ip = colonIndex > -1 ? session.clientKey.substring(0, colonIndex) : session.clientKey;
+            const userAgent = colonIndex > -1 ? session.clientKey.substring(colonIndex + 1) : "";
+            sessionList.push({
+              id: sessionId,
+              ip,
+              userAgent: userAgent || "(none)",
+              createdAt: new Date(session.createdAt).toISOString(),
+              lastActivity: new Date(session.lastActivity).toISOString(),
+            });
+          }
           res.writeHead(200, { "content-type": "application/json" });
-          res.end(JSON.stringify({ ok: true, sessions: this.sessions.size }));
+          res.end(JSON.stringify({
+            ok: true,
+            vault: this.app.vault.getName(),
+            sessions: sessionList,
+          }, null, 2));
         } else if (url === "/debug") {
           // Debug endpoint to inspect server state
           const sessionInfo: Record<string, unknown>[] = [];
@@ -2070,10 +2158,25 @@ export class ObsidianMcpHost {
     });
 
     this.httpServer = server;
-    console.log(`[F9 MCP] Server started on ${protocol}://127.0.0.1:${port}/mcp (multi-session v2 - ${new Date().toISOString()})`);
+
+    // Start periodic session cleanup
+    this.cleanupInterval = setInterval(() => {
+      this.cleanupExpiredSessions().catch((err) => {
+        console.error("[F9 MCP] Error during session cleanup:", err);
+      });
+    }, SESSION_CLEANUP_INTERVAL_MS);
+
+    const timeoutMinutes = this.config.sessionTimeoutMinutes ?? DEFAULT_SESSION_TIMEOUT_MINUTES;
+    console.log(`[F9 MCP] Server started on ${protocol}://127.0.0.1:${port}/mcp (session timeout: ${timeoutMinutes} min)`);
   }
 
   async stop(): Promise<void> {
+    // Clear cleanup interval
+    if (this.cleanupInterval) {
+      clearInterval(this.cleanupInterval);
+      this.cleanupInterval = undefined;
+    }
+
     // Close all active sessions
     const closePromises: Promise<void>[] = [];
 

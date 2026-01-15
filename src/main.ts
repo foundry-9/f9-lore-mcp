@@ -234,7 +234,7 @@ export default class F9ObsidianMCPPlugin extends Plugin {
   private updateStatusBar(): void {
     if (!this.statusBarItem) return;
 
-    const parts: string[] = ["F9 MCP"];
+    const parts: string[] = [`F9 MCP:${this.settings.mcpPort}`];
 
     // Add session count if MCP is running
     if (this.mcpHost?.isRunning()) {

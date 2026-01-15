@@ -63,6 +63,15 @@
 
 ### Changed
 
+- **Improved `search` and `grep` tool descriptions** to clarify intended use cases
+  - `search`: Positioned as the default tool for exploring the vault, finding information about topics, and discovering relationships/patterns/concepts
+  - `grep`: Positioned as a surgical tool for precise text matching, typically when locating something specific to edit
+
+- **`search` tool now returns full chunk content** instead of truncated 200-character previews
+  - Previously, previews showed only the first 200 characters, which might not contain the semantically relevant content
+  - Now returns the full ~2000 character chunk so the matched content is always visible
+  - Results separated by `---` dividers for readability
+
 - **Refactored embedding system to use provider abstraction**
   - `EmbeddingProvider` interface implemented by both `OllamaClient` and new `OpenAIClient`
   - Index invalidation now based on provider key (includes provider type + model + endpoint)

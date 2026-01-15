@@ -1510,7 +1510,8 @@ export class ObsidianMcpHost {
     mcp.registerTool(
       "search",
       {
-        description: "Semantic vector search across vault notes using embeddings",
+        description:
+          "Semantic vector search across vault notes. Use this as the default search tool when exploring the vault, finding information about a topic, or discovering relationships, patterns, and concepts. For precise text matching (e.g., to locate something specific for editing), use grep instead.",
         inputSchema: z.object({
           query: z.string().describe("Natural language search query").min(1),
           limit: z
@@ -1548,9 +1549,9 @@ export class ObsidianMcpHost {
           const formatted = results
             .map(
               (r, i) =>
-                `${i + 1}. **${r.chunk.filePath}** (score: ${r.score.toFixed(3)})\n   > ${r.chunk.preview}...`
+                `${i + 1}. **${r.chunk.filePath}** (score: ${r.score.toFixed(3)})\n\n${r.chunk.content}`
             )
-            .join("\n\n");
+            .join("\n\n---\n\n");
 
           return {
             content: [{ type: "text", text: formatted }],
@@ -1574,7 +1575,7 @@ export class ObsidianMcpHost {
       "grep",
       {
         description:
-          "Search for text or regex patterns across notes in the vault. Returns matching lines with context.",
+          "Surgical text search for finding exact strings or regex patterns. Use this when you need to locate something specific—typically to edit it—such as a particular phrase, variable name, or tag. For general exploration or finding information about a topic, use the semantic search tool instead. Returns matching lines with file paths and optional context.",
         inputSchema: z.object({
           query: z.string().describe("Search string or regex pattern").min(1),
           is_regex: z

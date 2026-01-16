@@ -4,6 +4,14 @@
 
 ### Added
 
+- **Unicode diacritical normalization for search tools**
+  - Searching for "Nimue" now matches "Nimuë" (and similar diacritical variations)
+  - Uses Unicode NFD normalization to decompose characters, then strips combining marks (U+0300–U+036F) for comparison
+  - `grep` tool: New `normalize_diacritics` parameter (default: `true`) for literal searches
+  - `str_replace` tool: New `normalize_diacritics` parameter (default: `true`) - finds normalized matches but replaces original text
+  - `search` tool: Queries are automatically normalized for better semantic matching
+  - Original content is always preserved; normalization is only used for comparison/matching
+
 - **`grep` tool** for text and regex search across vault notes
   - Search for literal strings or regex patterns
   - Optional case-sensitive matching (`case_sensitive` parameter)

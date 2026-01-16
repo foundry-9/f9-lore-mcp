@@ -28,6 +28,7 @@ import {
   insertContent,
   type InsertPosition,
 } from "./editors";
+import { normalizeForSearch, replaceWithNormalization } from "../utils/normalize";
 
 export interface McpConfig {
   enabled: boolean;
@@ -1532,7 +1533,9 @@ export class ObsidianMcpHost {
         }
 
         try {
-          const results = await this.vectorIndexer.search(query, limit);
+          // Normalize the query to strip diacriticals for better semantic matching
+          const normalizedQuery = normalizeForSearch(query);
+          const results = await this.vectorIndexer.search(normalizedQuery, limit);
 
           if (results.length === 0) {
             return {
@@ -1604,19 +1607,27 @@ export class ObsidianMcpHost {
             .optional()
             .default(100)
             .describe("Maximum number of matches to return (default: 100)"),
+          normalize_diacritics: z
+            .boolean()
+            .optional()
+            .default(true)
+            .describe("If true (default), normalize Unicode diacritics for matching (e.g., 'Nimue' matches 'Nimuë')"),
         }),
       },
       async (args) => {
-        const { query, is_regex, case_sensitive, path, context_lines, max_results } = args;
+        const { query, is_regex, case_sensitive, path, context_lines, max_results, normalize_diacritics } = args;
 
         // Build regex from query
+        // If normalizing diacritics, normalize the query first
+        const queryToUse = normalize_diacritics && !is_regex ? normalizeForSearch(query) : query;
+
         let regex: RegExp;
         try {
           if (is_regex) {
-            regex = new RegExp(query, case_sensitive ? "g" : "gi");
+            regex = new RegExp(queryToUse, case_sensitive ? "g" : "gi");
           } else {
             // Escape special regex characters for literal search
-            const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+            const escaped = queryToUse.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
             regex = new RegExp(escaped, case_sensitive ? "g" : "gi");
           }
         } catch (err) {
@@ -1695,7 +1706,9 @@ export class ObsidianMcpHost {
 
             // Reset regex lastIndex for each line
             regex.lastIndex = 0;
-            if (regex.test(lines[i])) {
+            // Normalize the line for comparison if diacritics normalization is enabled
+            const lineToTest = normalize_diacritics && !is_regex ? normalizeForSearch(lines[i]) : lines[i];
+            if (regex.test(lineToTest)) {
               // Get context lines
               const contextBefore: string[] = [];
               const contextAfter: string[] = [];
@@ -1783,10 +1796,15 @@ export class ObsidianMcpHost {
             .optional()
             .default(false)
             .describe("If true, only report what would be changed without making changes"),
+          normalize_diacritics: z
+            .boolean()
+            .optional()
+            .default(true)
+            .describe("If true (default), normalize Unicode diacritics for matching (e.g., 'Nimue' matches 'Nimuë')"),
         }),
       },
       async (args) => {
-        const { search, replace, case_sensitive, path, dry_run } = args;
+        const { search, replace, case_sensitive, path, dry_run, normalize_diacritics } = args;
 
         // Determine which files to search
         let filesToSearch: TFile[] = [];
@@ -1846,7 +1864,12 @@ export class ObsidianMcpHost {
           let newContent: string;
           let count: number;
 
-          if (case_sensitive) {
+          if (normalize_diacritics) {
+            // Use normalization-aware replacement
+            const result = replaceWithNormalization(content, search, replace, case_sensitive);
+            newContent = result.newContent;
+            count = result.count;
+          } else if (case_sensitive) {
             // Case-sensitive: simple split and count
             const parts = content.split(search);
             count = parts.length - 1;

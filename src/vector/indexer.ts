@@ -277,6 +277,7 @@ export class VectorIndexer {
 
   /**
    * Process a single file after its debounce period has elapsed.
+   * Uses isIndexing flag to serialize processing and prevent race conditions.
    *
    * @param path - Vault-relative path of the file
    */
@@ -289,10 +290,22 @@ export class VectorIndexer {
       return;
     }
 
+    // If already indexing, re-schedule for later to prevent concurrent processing
+    if (this.isIndexing) {
+      const timer = setTimeout(
+        () => this.processFileAfterDebounce(path),
+        this.settings.debounceMs
+      );
+      this.fileDebounceTimers.set(path, timer);
+      return;
+    }
+
+    this.isIndexing = true;
     this.pendingFiles.delete(path);
 
     const file = this.app.vault.getFileByPath(path);
     if (!file) {
+      this.isIndexing = false;
       return;
     }
 
@@ -303,6 +316,8 @@ export class VectorIndexer {
       await this.saveIndex();
     } catch (err) {
       console.error(`F9 MCP: Failed to index ${path}:`, err);
+    } finally {
+      this.isIndexing = false;
     }
   }
 
@@ -313,6 +328,8 @@ export class VectorIndexer {
     if (this.isIndexing || this.pendingFiles.size === 0) {
       return;
     }
+
+    this.isIndexing = true;
 
     const paths = Array.from(this.pendingFiles);
     this.pendingFiles.clear();
@@ -325,18 +342,22 @@ export class VectorIndexer {
 
     console.log(`F9 MCP: Processing ${paths.length} pending files`);
 
-    for (const path of paths) {
-      const file = this.app.vault.getFileByPath(path);
-      if (file) {
-        try {
-          await this.indexFile(file);
-        } catch (err) {
-          console.error(`F9 MCP: Failed to index ${path}:`, err);
+    try {
+      for (const path of paths) {
+        const file = this.app.vault.getFileByPath(path);
+        if (file) {
+          try {
+            await this.indexFile(file);
+          } catch (err) {
+            console.error(`F9 MCP: Failed to index ${path}:`, err);
+          }
         }
       }
-    }
 
-    await this.saveIndex();
+      await this.saveIndex();
+    } finally {
+      this.isIndexing = false;
+    }
   }
 
   /**

@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **Race condition in per-file vector indexing**
+  - Added `isIndexing` guard to `processFileAfterDebounce` to prevent concurrent file processing
+  - Files that arrive while indexing is in progress are re-scheduled instead of processed concurrently
+  - `processPendingFiles` now properly sets `isIndexing` flag during bulk processing
+  - Fixes potential startup hang caused by concurrent `saveIndex()` calls racing on plugin data
+
 ### Added
 
 - **Per-file debouncing for vector indexing**

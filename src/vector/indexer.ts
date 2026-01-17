@@ -178,12 +178,29 @@ export class VectorIndexer {
   /**
    * Remove legacy embedding data from data.json if it exists.
    * This cleans up after migration to the cache file.
+   * Checks both top-level and per-vault locations.
    */
   private async cleanupLegacyData(): Promise<void> {
     try {
       const data = await this.plugin.loadData();
-      if (data && EMBEDDING_INDEX_KEY in data) {
+      if (!data) return;
+
+      let cleaned = false;
+
+      // Check top-level (original legacy location)
+      if (EMBEDDING_INDEX_KEY in data) {
         delete data[EMBEDDING_INDEX_KEY];
+        cleaned = true;
+      }
+
+      // Check per-vault location (where Obsidian's saveData may have placed it)
+      const vaultName = this.app.vault.getName();
+      if (data.vaults?.[vaultName]?.[EMBEDDING_INDEX_KEY]) {
+        delete data.vaults[vaultName][EMBEDDING_INDEX_KEY];
+        cleaned = true;
+      }
+
+      if (cleaned) {
         await this.plugin.saveData(data);
         console.log("F9 MCP: Cleaned up legacy embeddingIndex from data.json");
       }

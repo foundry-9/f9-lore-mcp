@@ -16,6 +16,10 @@
 
 ### Fixed
 
+- **Legacy embeddingIndex cleanup now checks per-vault location**
+  - Previous cleanup only checked top-level `data["embeddingIndex"]`, but Obsidian stores settings under `data.vaults[vaultName]`
+  - Now also removes `data.vaults[vaultName].embeddingIndex` to properly clean up legacy data
+
 - **Race condition in per-file vector indexing**
   - Added `isIndexing` guard to `processFileAfterDebounce` to prevent concurrent file processing
   - Files that arrive while indexing is in progress are re-scheduled instead of processed concurrently

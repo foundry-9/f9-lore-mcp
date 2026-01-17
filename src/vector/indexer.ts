@@ -164,8 +164,12 @@ export class VectorIndexer {
       return;
     }
 
-    // Generate embeddings for all chunks
-    const embeddings = await this.provider.embed(chunks);
+    // Prepend file path to each chunk for better semantic search on filenames
+    const filePrefix = `[${file.path}]\n\n`;
+    const chunksWithPath = chunks.map(chunk => filePrefix + chunk);
+
+    // Generate embeddings for chunks with file path context
+    const embeddings = await this.provider.embed(chunksWithPath);
 
     // Remove old chunks for this file
     this.index.chunks = this.index.chunks.filter(c => c.filePath !== file.path);
@@ -176,8 +180,8 @@ export class VectorIndexer {
         id: `${file.path}::${i}`,
         filePath: file.path,
         chunkIndex: i,
-        preview: chunks[i].slice(0, 200),
-        content: chunks[i],
+        preview: chunksWithPath[i].slice(0, 200),
+        content: chunksWithPath[i],
         embedding: embeddings[i],
         embeddedAt: file.stat.mtime,
       };

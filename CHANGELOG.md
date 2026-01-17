@@ -78,6 +78,12 @@
 
 ### Changed
 
+- **File path prepended to vector search chunks**
+  - Each chunk now includes `[path/to/file.md]` prefix before the content
+  - Improves semantic search matching on filenames and folder paths
+  - e.g., searching "meeting notes" now matches files named "Meeting Notes.md" even if the content doesn't mention meetings
+  - Note: Existing embeddings should be reindexed to include the new filename context
+
 - **Improved `search` and `grep` tool descriptions** to clarify intended use cases
   - `search`: Positioned as the default tool for exploring the vault, finding information about topics, and discovering relationships/patterns/concepts
   - `grep`: Positioned as a surgical tool for precise text matching, typically when locating something specific to edit

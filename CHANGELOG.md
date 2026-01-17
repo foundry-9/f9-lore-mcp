@@ -12,6 +12,7 @@
   - Prevents embeddings from being synced across devices (which caused index corruption)
   - Vault-specific hash allows symlinked plugin directories to work correctly with multiple vaults
   - Automatic migration from legacy `data.json` storage on first load
+  - Legacy `embeddingIndex` key is removed from `data.json` after successful migration or cache load
 
 ### Fixed
 

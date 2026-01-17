@@ -135,6 +135,9 @@ export class VectorIndexer {
           console.log(`F9 MCP: Loaded embedding index from cache (${stored.chunks.length} chunks)`);
           this.index = stored;
         }
+
+        // Clean up any leftover legacy data from a previous migration
+        await this.cleanupLegacyData();
         return;
       }
     } catch {
@@ -170,6 +173,23 @@ export class VectorIndexer {
 
     // No existing index found, create empty
     this.index = createEmptyIndex(currentProviderKey);
+  }
+
+  /**
+   * Remove legacy embedding data from data.json if it exists.
+   * This cleans up after migration to the cache file.
+   */
+  private async cleanupLegacyData(): Promise<void> {
+    try {
+      const data = await this.plugin.loadData();
+      if (data && EMBEDDING_INDEX_KEY in data) {
+        delete data[EMBEDDING_INDEX_KEY];
+        await this.plugin.saveData(data);
+        console.log("F9 MCP: Cleaned up legacy embeddingIndex from data.json");
+      }
+    } catch (err) {
+      console.error("F9 MCP: Failed to clean up legacy data:", err);
+    }
   }
 
   /**

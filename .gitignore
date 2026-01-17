@@ -17,6 +17,7 @@ data.json
 dist/
 tmp/
 *.log
+.vscode/
 
 .claude
 certs

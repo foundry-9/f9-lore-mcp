@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **Embedding index moved to system cache directory**
+  - Embeddings are now stored in a platform-appropriate cache directory instead of `data.json`
+  - macOS: `~/Library/Caches/f9-obsidian-mcp/<vault-hash>/embeddings.json`
+  - Windows: `%LOCALAPPDATA%/f9-obsidian-mcp/<vault-hash>/embeddings.json`
+  - Linux: `~/.cache/f9-obsidian-mcp/<vault-hash>/embeddings.json`
+  - Prevents embeddings from being synced across devices (which caused index corruption)
+  - Vault-specific hash allows symlinked plugin directories to work correctly with multiple vaults
+  - Automatic migration from legacy `data.json` storage on first load
+
 ### Fixed
 
 - **Race condition in per-file vector indexing**

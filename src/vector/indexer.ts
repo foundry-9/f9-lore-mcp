@@ -2,7 +2,7 @@
  * Vector indexer - main orchestrator for embedding and search
  */
 
-import type { App, Plugin, TFile } from "obsidian";
+import type { App, Plugin, TFile, FileSystemAdapter } from "obsidian";
 import type {
   EmbeddingIndex,
   VectorSearchSettings,
@@ -14,9 +14,54 @@ import { chunkMarkdown } from "./chunker";
 import type { EmbeddingProvider } from "./provider";
 import { createEmbeddingProvider } from "./provider";
 import { topK } from "./similarity";
+import { createHash } from "crypto";
+import * as os from "os";
+import * as path from "path";
+import * as fs from "fs/promises";
 
-/** Key used to store embedding index in plugin data */
+/** Key used to store embedding index in plugin data (legacy, for migration) */
 const EMBEDDING_INDEX_KEY = "embeddingIndex";
+
+/** Cache file name for embeddings */
+const EMBEDDINGS_CACHE_FILE = "embeddings.json";
+
+/**
+ * Get the platform-appropriate cache directory for the plugin.
+ */
+function getCacheBaseDir(): string {
+  const platform = os.platform();
+  const home = os.homedir();
+
+  if (platform === "darwin") {
+    return path.join(home, "Library", "Caches", "f9-obsidian-mcp");
+  } else if (platform === "win32") {
+    return path.join(
+      process.env.LOCALAPPDATA || path.join(home, "AppData", "Local"),
+      "f9-obsidian-mcp"
+    );
+  } else {
+    // Linux and others - use XDG_CACHE_HOME or fallback to ~/.cache
+    return path.join(
+      process.env.XDG_CACHE_HOME || path.join(home, ".cache"),
+      "f9-obsidian-mcp"
+    );
+  }
+}
+
+/**
+ * Create a short hash of the vault path for unique cache directory.
+ */
+function getVaultHash(vaultPath: string): string {
+  return createHash("sha256").update(vaultPath).digest("hex").slice(0, 16);
+}
+
+/**
+ * Get the full path to the cache file for a specific vault.
+ */
+function getCacheFilePath(vaultPath: string): string {
+  const vaultHash = getVaultHash(vaultPath);
+  return path.join(getCacheBaseDir(), vaultHash, EMBEDDINGS_CACHE_FILE);
+}
 
 /**
  * VectorIndexer manages the embedding index for vector search.
@@ -45,6 +90,13 @@ export class VectorIndexer {
   }
 
   /**
+   * Get the absolute path to the vault root.
+   */
+  private getVaultPath(): string {
+    return (this.app.vault.adapter as FileSystemAdapter).getBasePath();
+  }
+
+  /**
    * Create an embedding provider based on settings.
    */
   private createProvider(settings: VectorSearchSettings): EmbeddingProvider {
@@ -59,36 +111,80 @@ export class VectorIndexer {
   }
 
   /**
-   * Load the embedding index from plugin data.
+   * Load the embedding index from cache file.
+   * Falls back to legacy data.json and migrates if found.
    * Creates an empty index if none exists or if migration is needed.
    */
   async loadIndex(): Promise<void> {
-    const data = await this.plugin.loadData();
-    const stored = data?.[EMBEDDING_INDEX_KEY] as EmbeddingIndex | undefined;
     const currentProviderKey = this.provider.getProviderKey();
+    const vaultPath = this.getVaultPath();
+    const cacheFilePath = getCacheFilePath(vaultPath);
 
-    if (stored && stored.version === EMBEDDING_INDEX_VERSION) {
-      // Check if provider changed - if so, index is invalid
-      if (stored.providerKey !== currentProviderKey) {
+    // Try loading from cache file first
+    try {
+      const cacheContent = await fs.readFile(cacheFilePath, "utf-8");
+      const stored = JSON.parse(cacheContent) as EmbeddingIndex;
+
+      if (stored && stored.version === EMBEDDING_INDEX_VERSION) {
+        if (stored.providerKey !== currentProviderKey) {
+          console.log(
+            `F9 MCP: Embedding provider changed from ${stored.providerKey} to ${currentProviderKey}, index invalidated`
+          );
+          this.index = createEmptyIndex(currentProviderKey);
+        } else {
+          console.log(`F9 MCP: Loaded embedding index from cache (${stored.chunks.length} chunks)`);
+          this.index = stored;
+        }
+        return;
+      }
+    } catch {
+      // Cache file doesn't exist or is invalid, check for legacy data
+    }
+
+    // Try loading from legacy data.json for migration
+    const data = await this.plugin.loadData();
+    const legacyStored = data?.[EMBEDDING_INDEX_KEY] as EmbeddingIndex | undefined;
+
+    if (legacyStored && legacyStored.version === EMBEDDING_INDEX_VERSION) {
+      if (legacyStored.providerKey !== currentProviderKey) {
         console.log(
-          `F9 MCP: Embedding provider changed from ${stored.providerKey} to ${currentProviderKey}, index invalidated`
+          `F9 MCP: Embedding provider changed from ${legacyStored.providerKey} to ${currentProviderKey}, index invalidated`
         );
         this.index = createEmptyIndex(currentProviderKey);
       } else {
-        this.index = stored;
+        console.log(
+          `F9 MCP: Migrating embedding index from data.json to cache (${legacyStored.chunks.length} chunks)`
+        );
+        this.index = legacyStored;
+
+        // Save to cache file
+        await this.saveIndex();
+
+        // Remove from data.json
+        delete data[EMBEDDING_INDEX_KEY];
+        await this.plugin.saveData(data);
+        console.log("F9 MCP: Migration complete, removed embeddingIndex from data.json");
       }
-    } else {
-      this.index = createEmptyIndex(currentProviderKey);
+      return;
     }
+
+    // No existing index found, create empty
+    this.index = createEmptyIndex(currentProviderKey);
   }
 
   /**
-   * Save the embedding index to plugin data.
+   * Save the embedding index to the cache file.
    */
   async saveIndex(): Promise<void> {
-    const data = (await this.plugin.loadData()) ?? {};
-    data[EMBEDDING_INDEX_KEY] = this.index;
-    await this.plugin.saveData(data);
+    const vaultPath = this.getVaultPath();
+    const cacheFilePath = getCacheFilePath(vaultPath);
+    const cacheDir = path.dirname(cacheFilePath);
+
+    // Ensure cache directory exists
+    await fs.mkdir(cacheDir, { recursive: true });
+
+    // Write index to cache file
+    await fs.writeFile(cacheFilePath, JSON.stringify(this.index), "utf-8");
   }
 
   /**

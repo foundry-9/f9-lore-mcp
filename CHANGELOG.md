@@ -4,6 +4,13 @@
 
 ### Added
 
+- **Per-file debouncing for vector indexing**
+  - Each file must be quiescent (unchanged) for the configured duration before being sent to the embedder
+  - New "Indexing delay" setting in Vector Search settings (configurable in seconds)
+  - Default changed from 2 seconds to 10 seconds
+  - Prevents excessive re-indexing during active editing sessions
+  - Each file has its own independent timer; editing one file doesn't delay indexing of other quiescent files
+
 - **Unicode diacritical normalization for search tools**
   - Searching for "Nimue" now matches "Nimuë" (and similar diacritical variations)
   - Uses Unicode NFD normalization to decompose characters, then strips combining marks (U+0300–U+036F) for comparison

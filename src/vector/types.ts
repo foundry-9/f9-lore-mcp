@@ -62,7 +62,7 @@ export interface VectorSearchSettings {
   chunkSize: number;
   /** Overlap between chunks in characters */
   chunkOverlap: number;
-  /** Debounce delay in ms for batch file changes */
+  /** Per-file debounce delay in ms - file must be quiescent for this duration before indexing */
   debounceMs: number;
 }
 
@@ -77,7 +77,7 @@ export const DEFAULT_VECTOR_SETTINGS: VectorSearchSettings = {
   openaiBaseUrl: "",
   chunkSize: 2000,
   chunkOverlap: 200,
-  debounceMs: 2000,
+  debounceMs: 10000,
 };
 
 /** Search result with score */

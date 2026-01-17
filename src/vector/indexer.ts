@@ -31,7 +31,8 @@ export class VectorIndexer {
   private index: EmbeddingIndex;
   private provider: EmbeddingProvider;
   private pendingFiles: Set<string> = new Set();
-  private debounceTimer?: ReturnType<typeof setTimeout>;
+  /** Per-file debounce timers - each file gets its own timer */
+  private fileDebounceTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
   private isIndexing = false;
 
   constructor(
@@ -248,26 +249,61 @@ export class VectorIndexer {
   }
 
   /**
-   * Queue a file for indexing with debouncing.
-   * Multiple rapid changes will be batched together.
+   * Queue a file for indexing with per-file debouncing.
+   * Each file must be quiescent (no changes) for the configured duration before being indexed.
    *
    * @param path - Vault-relative path of the file
    */
   queueFileForIndexing(path: string): void {
     this.pendingFiles.add(path);
 
-    if (this.debounceTimer) {
-      clearTimeout(this.debounceTimer);
+    // Clear any existing timer for this specific file
+    const existingTimer = this.fileDebounceTimers.get(path);
+    if (existingTimer) {
+      clearTimeout(existingTimer);
     }
 
-    this.debounceTimer = setTimeout(
-      () => this.processPendingFiles(),
+    // Start a new timer for this file
+    const timer = setTimeout(
+      () => this.processFileAfterDebounce(path),
       this.settings.debounceMs
     );
+    this.fileDebounceTimers.set(path, timer);
   }
 
   /**
-   * Process all pending files in the queue.
+   * Process a single file after its debounce period has elapsed.
+   *
+   * @param path - Vault-relative path of the file
+   */
+  private async processFileAfterDebounce(path: string): Promise<void> {
+    // Clean up the timer entry
+    this.fileDebounceTimers.delete(path);
+
+    // Skip if file was removed from pending (e.g., deleted)
+    if (!this.pendingFiles.has(path)) {
+      return;
+    }
+
+    this.pendingFiles.delete(path);
+
+    const file = this.app.vault.getFileByPath(path);
+    if (!file) {
+      return;
+    }
+
+    console.log(`F9 MCP: Indexing ${path} after quiescence period`);
+
+    try {
+      await this.indexFile(file);
+      await this.saveIndex();
+    } catch (err) {
+      console.error(`F9 MCP: Failed to index ${path}:`, err);
+    }
+  }
+
+  /**
+   * Process all pending files in the queue immediately (used for startup bulk processing).
    */
   private async processPendingFiles(): Promise<void> {
     if (this.isIndexing || this.pendingFiles.size === 0) {
@@ -276,7 +312,12 @@ export class VectorIndexer {
 
     const paths = Array.from(this.pendingFiles);
     this.pendingFiles.clear();
-    this.debounceTimer = undefined;
+
+    // Clear all pending per-file timers since we're processing everything now
+    for (const [, timer] of this.fileDebounceTimers) {
+      clearTimeout(timer);
+    }
+    this.fileDebounceTimers.clear();
 
     console.log(`F9 MCP: Processing ${paths.length} pending files`);
 
@@ -303,6 +344,13 @@ export class VectorIndexer {
     this.index.chunks = this.index.chunks.filter(c => c.filePath !== path);
     delete this.index.fileMtimes[path];
     this.pendingFiles.delete(path);
+
+    // Clean up any pending debounce timer for this file
+    const timer = this.fileDebounceTimers.get(path);
+    if (timer) {
+      clearTimeout(timer);
+      this.fileDebounceTimers.delete(path);
+    }
   }
 
   /**
@@ -328,6 +376,19 @@ export class VectorIndexer {
     if (this.pendingFiles.has(oldPath)) {
       this.pendingFiles.delete(oldPath);
       this.pendingFiles.add(newPath);
+    }
+
+    // Transfer any pending debounce timer to the new path
+    const timer = this.fileDebounceTimers.get(oldPath);
+    if (timer) {
+      // Cancel the old timer and start a new one for the new path
+      clearTimeout(timer);
+      this.fileDebounceTimers.delete(oldPath);
+      const newTimer = setTimeout(
+        () => this.processFileAfterDebounce(newPath),
+        this.settings.debounceMs
+      );
+      this.fileDebounceTimers.set(newPath, newTimer);
     }
   }
 

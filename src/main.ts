@@ -415,6 +415,23 @@ class F9ObsidianMCPSettingTab extends PluginSettingTab {
       );
 
     new Setting(containerEl)
+      .setName("Indexing delay (seconds)")
+      .setDesc("Wait for file to be unchanged for this duration before indexing")
+      .addText((text) =>
+        text
+          .setPlaceholder("10")
+          .setValue(String(this.plugin.settings.vectorSearch.debounceMs / 1000))
+          .onChange(async (val) => {
+            const parsed = Number(val);
+            if (!Number.isNaN(parsed) && parsed >= 0) {
+              this.plugin.settings.vectorSearch.debounceMs = parsed * 1000;
+              this.plugin.vectorIndexer?.updateSettings(this.plugin.settings.vectorSearch);
+              await this.plugin.saveSettings();
+            }
+          })
+      );
+
+    new Setting(containerEl)
       .setName("Embedding provider")
       .setDesc("Choose the embedding service to use")
       .addDropdown((dropdown) =>

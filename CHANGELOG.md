@@ -23,6 +23,11 @@
 
 ### Fixed
 
+- **`refresh_index` and `reindex_vault` tools broken due to renamed method**
+  - Tools were calling non-existent `checkOllamaConnection()` method on VectorIndexer
+  - Method was renamed to `checkProviderConnection()` when multi-provider support was added
+  - Error messages updated to be provider-agnostic ("Embedding provider is not available" instead of Ollama-specific)
+
 - **Legacy embeddingIndex cleanup now checks per-vault location**
   - Previous cleanup only checked top-level `data["embeddingIndex"]`, but Obsidian stores settings under `data.vaults[vaultName]`
   - Now also removes `data.vaults[vaultName].embeddingIndex` to properly clean up legacy data

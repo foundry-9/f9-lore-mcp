@@ -1419,10 +1419,10 @@ export class ObsidianMcpHost {
         }
 
         try {
-          const available = await this.vectorIndexer.checkOllamaConnection();
+          const available = await this.vectorIndexer.checkProviderConnection();
           if (!available) {
             return {
-              content: [{ type: "text", text: "Cannot connect to Ollama. Is it running?" }],
+              content: [{ type: "text", text: "Embedding provider is not available. Check your settings." }],
               isError: true,
             };
           }
@@ -1472,10 +1472,10 @@ export class ObsidianMcpHost {
         }
 
         try {
-          const available = await this.vectorIndexer.checkOllamaConnection();
+          const available = await this.vectorIndexer.checkProviderConnection();
           if (!available) {
             return {
-              content: [{ type: "text", text: "Cannot connect to Ollama. Is it running?" }],
+              content: [{ type: "text", text: "Embedding provider is not available. Check your settings." }],
               isError: true,
             };
           }

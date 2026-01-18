@@ -13,6 +13,7 @@ import { createEmptyIndex, EMBEDDING_INDEX_VERSION } from "./types";
 import { chunkMarkdown } from "./chunker";
 import type { EmbeddingProvider } from "./provider";
 import { createEmbeddingProvider } from "./provider";
+import { TfidfClient } from "./tfidf";
 import { topK } from "./similarity";
 import { createHash } from "crypto";
 import * as os from "os";
@@ -134,6 +135,8 @@ export class VectorIndexer {
         } else {
           console.log(`F9 MCP: Loaded embedding index from cache (${stored.chunks.length} chunks)`);
           this.index = stored;
+          // Load TF-IDF state if present and using TF-IDF provider
+          this.loadTfidfState();
         }
 
         // Clean up any leftover legacy data from a previous migration
@@ -159,6 +162,8 @@ export class VectorIndexer {
           `F9 MCP: Migrating embedding index from data.json to cache (${legacyStored.chunks.length} chunks)`
         );
         this.index = legacyStored;
+        // Load TF-IDF state if present and using TF-IDF provider
+        this.loadTfidfState();
 
         // Save to cache file
         await this.saveIndex();
@@ -210,12 +215,42 @@ export class VectorIndexer {
   }
 
   /**
+   * Load TF-IDF state from the index into the provider if applicable.
+   */
+  private loadTfidfState(): void {
+    if (this.provider instanceof TfidfClient && this.index.tfidfState) {
+      this.provider.loadState(this.index.tfidfState);
+      console.log(`F9 MCP: Loaded TF-IDF vocabulary (${this.index.tfidfState.vocabulary.length} terms)`);
+    }
+  }
+
+  /**
+   * Save TF-IDF state from the provider to the index if applicable.
+   */
+  private saveTfidfState(): void {
+    if (this.provider instanceof TfidfClient) {
+      const state = this.provider.getState();
+      if (state) {
+        this.index.tfidfState = state;
+      } else {
+        delete this.index.tfidfState;
+      }
+    } else {
+      // Clear TF-IDF state if not using TF-IDF provider
+      delete this.index.tfidfState;
+    }
+  }
+
+  /**
    * Save the embedding index to the cache file.
    */
   async saveIndex(): Promise<void> {
     const vaultPath = this.getVaultPath();
     const cacheFilePath = getCacheFilePath(vaultPath);
     const cacheDir = path.dirname(cacheFilePath);
+
+    // Save TF-IDF state to index before writing
+    this.saveTfidfState();
 
     // Ensure cache directory exists
     await fs.mkdir(cacheDir, { recursive: true });
@@ -327,6 +362,9 @@ export class VectorIndexer {
   /**
    * Force re-embed all markdown files in the vault.
    *
+   * For TF-IDF provider, this first collects all chunks to fit the vocabulary,
+   * then embeds each file using the fitted vocabulary.
+   *
    * @param progressCallback - Optional callback for progress updates
    * @returns Object with indexed count and any errors
    */
@@ -347,6 +385,31 @@ export class VectorIndexer {
     this.index.providerKey = this.provider.getProviderKey();
 
     try {
+      // For TF-IDF, we need to fit on the entire corpus first
+      if (this.provider instanceof TfidfClient) {
+        console.log("F9 MCP: Collecting corpus for TF-IDF fitting...");
+        const allChunks: string[] = [];
+
+        // First pass: collect all chunks for vocabulary building
+        for (const file of files) {
+          try {
+            const content = await this.app.vault.read(file);
+            const chunks = chunkMarkdown(content, this.settings.chunkSize, this.settings.chunkOverlap);
+            const filePrefix = `[${file.path}]\n\n`;
+            for (const chunk of chunks) {
+              allChunks.push(filePrefix + chunk);
+            }
+          } catch (err) {
+            // Ignore errors during collection - we'll report them during indexing
+          }
+        }
+
+        console.log(`F9 MCP: Fitting TF-IDF on ${allChunks.length} chunks...`);
+        this.provider.fitCorpus(allChunks);
+        console.log("F9 MCP: TF-IDF vocabulary built, now embedding files...");
+      }
+
+      // Second pass (or only pass for non-TF-IDF): index each file
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
         progressCallback?.(file.path, i + 1, files.length);
@@ -370,6 +433,9 @@ export class VectorIndexer {
 
   /**
    * Perform a vector similarity search.
+   *
+   * All providers (Ollama, OpenAI, TF-IDF) use pre-computed embeddings.
+   * For TF-IDF, the vocabulary must be fitted via reindexVault() first.
    *
    * @param query - Natural language query
    * @param k - Number of results to return (default 10)
@@ -553,12 +619,29 @@ export class VectorIndexer {
   /**
    * Get statistics about the current index.
    */
-  getStats(): { fileCount: number; chunkCount: number; providerKey: string } {
-    return {
+  getStats(): {
+    fileCount: number;
+    chunkCount: number;
+    providerKey: string;
+    tfidfDrift?: {
+      unknownTermsCount: number;
+      vocabularySize: number;
+      driftPercentage: number;
+      sampleUnknownTerms: string[];
+    };
+  } {
+    const stats: ReturnType<typeof this.getStats> = {
       fileCount: Object.keys(this.index.fileMtimes).length,
       chunkCount: this.index.chunks.length,
       providerKey: this.index.providerKey,
     };
+
+    // Include TF-IDF drift stats if using TF-IDF provider
+    if (this.provider instanceof TfidfClient) {
+      stats.tfidfDrift = this.provider.getVocabularyDriftStats();
+    }
+
+    return stats;
   }
 
   /**

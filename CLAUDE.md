@@ -99,15 +99,23 @@ No test framework is configured yet.
 
 ### Vector Search (`src/vector/`)
 
-- `VectorIndexer` orchestrates embedding and search using local Ollama
+- `VectorIndexer` orchestrates embedding and search
+- Three embedding provider options:
+  - **Ollama** - Local LLM (default), requires Ollama running
+  - **OpenAI** - Cloud API, requires API key
+  - **TF-IDF** - Keyword-based, fully offline, no external services needed
 - Automatic indexing on file create/modify/delete/rename events
 - Fixed-size chunking (~500 tokens) with overlap
 - Staleness detection on startup compares file mtime against stored `embeddedAt`
-- Embeddings stored in plugin's `data.json` via `saveData()`
+- Embeddings stored in system cache directory (platform-specific)
 - Key files:
   - `types.ts` - Interfaces for ChunkEmbedding, EmbeddingIndex, VectorSearchSettings
+  - `provider.ts` - EmbeddingProvider interface and factory
   - `chunker.ts` - Paragraph-aware markdown chunking
   - `ollama.ts` - Ollama API client for embeddings
+  - `openai.ts` - OpenAI API client for embeddings
+  - `tfidf.ts` - TF-IDF client (fits on-demand at search time)
+  - `tfidf-vectorizer.ts` - TF-IDF vectorizer implementation
   - `similarity.ts` - Cosine similarity and topK search
   - `indexer.ts` - Main orchestrator class
 

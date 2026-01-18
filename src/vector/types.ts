@@ -3,6 +3,7 @@
  */
 
 import type { EmbeddingProviderType } from "./provider";
+import type { TfidfState } from "./tfidf";
 
 /** Schema version for future migrations */
 export const EMBEDDING_INDEX_VERSION = 2;
@@ -35,6 +36,8 @@ export interface EmbeddingIndex {
   fileMtimes: Record<string, number>;
   /** All chunk embeddings */
   chunks: ChunkEmbedding[];
+  /** TF-IDF state (vocabulary + IDF weights) - only present when using TF-IDF provider */
+  tfidfState?: TfidfState;
 }
 
 /** Vector search settings */

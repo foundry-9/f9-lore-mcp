@@ -28,6 +28,19 @@
 
 ### Added
 
+- **TF-IDF embedding provider** as a third option alongside Ollama and OpenAI
+  - Works fully offline with no external services required
+  - No local LLM needed (unlike Ollama)
+  - Fast search using pre-computed TF-IDF vectors (vocabulary fitted during reindex)
+  - Vocabulary and IDF weights persisted alongside embedding index
+  - Incremental indexing uses existing vocabulary (new terms ignored until reindex)
+  - **Vocabulary drift tracking**: Unknown terms are tracked during incremental indexing
+    - Settings show vocabulary size and number of unknown terms since last reindex
+    - Warning displayed when drift is detected with sample of new terms
+    - Helps users know when it's time to reindex for better search accuracy
+  - Keyword-based matching (less semantic understanding than neural embeddings)
+  - Good for users who want simple search without API costs or local LLM setup
+
 - **Per-file debouncing for vector indexing**
   - Each file must be quiescent (unchanged) for the configured duration before being sent to the embedder
   - New "Indexing delay" setting in Vector Search settings (configurable in seconds)

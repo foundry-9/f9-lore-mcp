@@ -6,7 +6,7 @@
  */
 
 /** Supported embedding provider types */
-export type EmbeddingProviderType = "ollama" | "openai";
+export type EmbeddingProviderType = "ollama" | "openai" | "tfidf";
 
 /**
  * Common interface for embedding providers.
@@ -66,6 +66,10 @@ export function createEmbeddingProvider(
         config.openaiModel ?? "text-embedding-3-small",
         config.openaiBaseUrl
       );
+    }
+    case "tfidf": {
+      const { TfidfClient } = require("./tfidf");
+      return new TfidfClient();
     }
     case "ollama":
     default: {

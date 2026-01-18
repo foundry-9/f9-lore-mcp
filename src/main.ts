@@ -438,9 +438,10 @@ class F9ObsidianMCPSettingTab extends PluginSettingTab {
         dropdown
           .addOption("ollama", "Ollama (local)")
           .addOption("openai", "OpenAI")
+          .addOption("tfidf", "TF-IDF (offline)")
           .setValue(this.plugin.settings.vectorSearch.embeddingProvider)
           .onChange(async (value) => {
-            this.plugin.settings.vectorSearch.embeddingProvider = value as "ollama" | "openai";
+            this.plugin.settings.vectorSearch.embeddingProvider = value as "ollama" | "openai" | "tfidf";
             this.plugin.vectorIndexer?.updateSettings(this.plugin.settings.vectorSearch);
             await this.plugin.saveSettings();
             this.display(); // Refresh to show provider-specific settings
@@ -450,8 +451,10 @@ class F9ObsidianMCPSettingTab extends PluginSettingTab {
     // Conditionally show provider-specific settings
     if (this.plugin.settings.vectorSearch.embeddingProvider === "ollama") {
       this.renderOllamaSettings(containerEl);
-    } else {
+    } else if (this.plugin.settings.vectorSearch.embeddingProvider === "openai") {
       this.renderOpenAISettings(containerEl);
+    } else if (this.plugin.settings.vectorSearch.embeddingProvider === "tfidf") {
+      this.renderTfidfSettings(containerEl);
     }
 
     new Setting(containerEl)
@@ -470,9 +473,10 @@ class F9ObsidianMCPSettingTab extends PluginSettingTab {
             const provider = this.plugin.settings.vectorSearch.embeddingProvider;
             if (provider === "ollama") {
               new Notice("Cannot connect to Ollama. Is it running?");
-            } else {
+            } else if (provider === "openai") {
               new Notice("Cannot connect to OpenAI. Check your API key.");
             }
+            // TF-IDF is always available, so no error message needed
             return;
           }
 
@@ -497,11 +501,31 @@ class F9ObsidianMCPSettingTab extends PluginSettingTab {
     // Show index stats
     const stats = this.plugin.vectorIndexer?.getStats();
     if (stats) {
+      let statusDesc = `${stats.fileCount} files, ${stats.chunkCount} chunks indexed using ${stats.providerKey}`;
+
+      // Add TF-IDF vocabulary drift info if available
+      if (stats.tfidfDrift && stats.tfidfDrift.vocabularySize > 0) {
+        statusDesc += ` | Vocabulary: ${stats.tfidfDrift.vocabularySize} terms`;
+        if (stats.tfidfDrift.unknownTermsCount > 0) {
+          statusDesc += ` | ${stats.tfidfDrift.unknownTermsCount} unknown terms (${stats.tfidfDrift.driftPercentage}% drift)`;
+        }
+      }
+
       new Setting(containerEl)
         .setName("Index status")
-        .setDesc(
-          `${stats.fileCount} files, ${stats.chunkCount} chunks indexed using ${stats.providerKey}`
-        );
+        .setDesc(statusDesc);
+
+      // Show warning if significant vocabulary drift detected
+      if (stats.tfidfDrift && stats.tfidfDrift.unknownTermsCount > 0) {
+        const driftSetting = new Setting(containerEl)
+          .setName("Vocabulary drift detected")
+          .setDesc(
+            `${stats.tfidfDrift.unknownTermsCount} new terms found since last reindex. ` +
+            `Consider reindexing to improve search accuracy. ` +
+            `Sample: ${stats.tfidfDrift.sampleUnknownTerms.slice(0, 5).join(", ")}${stats.tfidfDrift.sampleUnknownTerms.length > 5 ? "..." : ""}`
+          );
+        driftSetting.settingEl.addClass("mod-warning");
+      }
     }
   }
 
@@ -619,6 +643,20 @@ class F9ObsidianMCPSettingTab extends PluginSettingTab {
             this.plugin.vectorIndexer?.updateSettings(this.plugin.settings.vectorSearch);
             await this.plugin.saveSettings();
           })
+      );
+  }
+
+  /**
+   * Render TF-IDF-specific settings (informational only).
+   */
+  private renderTfidfSettings(containerEl: HTMLElement): void {
+    new Setting(containerEl)
+      .setName("TF-IDF Information")
+      .setDesc(
+        "TF-IDF (Term Frequency-Inverse Document Frequency) is a keyword-based search method. " +
+          "It works fully offline with no external services required. " +
+          "Search quality is based on keyword matching rather than semantic understanding. " +
+          "Indexing is instant since no embeddings are computed."
       );
   }
 

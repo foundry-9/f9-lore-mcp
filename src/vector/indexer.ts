@@ -65,6 +65,13 @@ function getCacheFilePath(vaultPath: string): string {
 }
 
 /**
+ * Compute a SHA-256 hash of content, returned as hex string.
+ */
+function computeContentHash(content: string): string {
+  return createHash("sha256").update(content).digest("hex");
+}
+
+/**
  * VectorIndexer manages the embedding index for vector search.
  *
  * Responsibilities:
@@ -126,7 +133,11 @@ export class VectorIndexer {
       const cacheContent = await fs.readFile(cacheFilePath, "utf-8");
       const stored = JSON.parse(cacheContent) as EmbeddingIndex;
 
-      if (stored && stored.version === EMBEDDING_INDEX_VERSION) {
+      if (stored && stored.version !== EMBEDDING_INDEX_VERSION) {
+        console.log(
+          `F9 MCP: Index version mismatch (stored: ${stored.version}, expected: ${EMBEDDING_INDEX_VERSION}), reindex required`
+        );
+      } else if (stored && stored.version === EMBEDDING_INDEX_VERSION) {
         if (stored.providerKey !== currentProviderKey) {
           console.log(
             `F9 MCP: Embedding provider changed from ${stored.providerKey} to ${currentProviderKey}, index invalidated`
@@ -282,19 +293,46 @@ export class VectorIndexer {
    * Check all markdown files for staleness and queue stale ones for reindexing.
    * Called on plugin startup.
    *
+   * Uses a hybrid mtime+hash approach:
+   * - If mtime unchanged: skip (fast path)
+   * - If mtime changed: compute hash and compare to detect actual content changes
+   *
    * @returns Number of stale files queued
    */
   async checkForStaleFiles(): Promise<number> {
     const files = this.app.vault.getMarkdownFiles();
     let staleCount = 0;
+    let hashChecks = 0;
 
     for (const file of files) {
       const storedMtime = this.index.fileMtimes[file.path];
+      const storedHash = this.index.fileHashes[file.path];
       const currentMtime = file.stat.mtime;
 
-      if (storedMtime === undefined || storedMtime < currentMtime) {
+      // New file - never indexed
+      if (storedMtime === undefined) {
         this.pendingFiles.add(file.path);
         staleCount++;
+        continue;
+      }
+
+      // Mtime unchanged - content hasn't changed (fast path)
+      if (storedMtime >= currentMtime) {
+        continue;
+      }
+
+      // Mtime changed - check content hash to detect actual changes
+      hashChecks++;
+      const content = await this.app.vault.read(file);
+      const currentHash = computeContentHash(content);
+
+      if (storedHash !== currentHash) {
+        // Content actually changed - needs reindex
+        this.pendingFiles.add(file.path);
+        staleCount++;
+      } else {
+        // Content unchanged despite mtime change - update mtime to avoid future checks
+        this.index.fileMtimes[file.path] = currentMtime;
       }
     }
 
@@ -304,6 +342,10 @@ export class VectorIndexer {
       if (!currentPaths.has(indexedPath)) {
         this.handleFileDelete(indexedPath);
       }
+    }
+
+    if (hashChecks > 0) {
+      console.log(`F9 MCP: Checked ${hashChecks} files with changed mtime, ${staleCount} had content changes`);
     }
 
     if (staleCount > 0) {
@@ -323,12 +365,14 @@ export class VectorIndexer {
    */
   async indexFile(file: TFile): Promise<void> {
     const content = await this.app.vault.read(file);
+    const contentHash = computeContentHash(content);
     const chunks = chunkMarkdown(content, this.settings.chunkSize, this.settings.chunkOverlap);
 
     if (chunks.length === 0) {
       // Empty file - remove any existing chunks
       this.index.chunks = this.index.chunks.filter(c => c.filePath !== file.path);
       this.index.fileMtimes[file.path] = file.stat.mtime;
+      this.index.fileHashes[file.path] = contentHash;
       return;
     }
 
@@ -357,6 +401,7 @@ export class VectorIndexer {
     }
 
     this.index.fileMtimes[file.path] = file.stat.mtime;
+    this.index.fileHashes[file.path] = contentHash;
   }
 
   /**
@@ -382,6 +427,7 @@ export class VectorIndexer {
     // Clear existing index
     this.index.chunks = [];
     this.index.fileMtimes = {};
+    this.index.fileHashes = {};
     this.index.providerKey = this.provider.getProviderKey();
 
     try {
@@ -567,6 +613,7 @@ export class VectorIndexer {
   handleFileDelete(path: string): void {
     this.index.chunks = this.index.chunks.filter(c => c.filePath !== path);
     delete this.index.fileMtimes[path];
+    delete this.index.fileHashes[path];
     this.pendingFiles.delete(path);
 
     // Clean up any pending debounce timer for this file
@@ -594,6 +641,11 @@ export class VectorIndexer {
     if (this.index.fileMtimes[oldPath] !== undefined) {
       this.index.fileMtimes[newPath] = this.index.fileMtimes[oldPath];
       delete this.index.fileMtimes[oldPath];
+    }
+
+    if (this.index.fileHashes[oldPath] !== undefined) {
+      this.index.fileHashes[newPath] = this.index.fileHashes[oldPath];
+      delete this.index.fileHashes[oldPath];
     }
 
     // Update pending files if needed

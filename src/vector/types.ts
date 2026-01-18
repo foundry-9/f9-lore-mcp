@@ -6,7 +6,7 @@ import type { EmbeddingProviderType } from "./provider";
 import type { TfidfState } from "./tfidf";
 
 /** Schema version for future migrations */
-export const EMBEDDING_INDEX_VERSION = 2;
+export const EMBEDDING_INDEX_VERSION = 3;
 
 /** A single chunk embedding with metadata */
 export interface ChunkEmbedding {
@@ -34,6 +34,8 @@ export interface EmbeddingIndex {
   providerKey: string;
   /** Map of file path -> file mtime when last indexed */
   fileMtimes: Record<string, number>;
+  /** Map of file path -> content hash (SHA-256, hex) when last indexed */
+  fileHashes: Record<string, string>;
   /** All chunk embeddings */
   chunks: ChunkEmbedding[];
   /** TF-IDF state (vocabulary + IDF weights) - only present when using TF-IDF provider */
@@ -95,6 +97,7 @@ export function createEmptyIndex(providerKey: string): EmbeddingIndex {
     version: EMBEDDING_INDEX_VERSION,
     providerKey,
     fileMtimes: {},
+    fileHashes: {},
     chunks: [],
   };
 }

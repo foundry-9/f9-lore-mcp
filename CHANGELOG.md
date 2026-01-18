@@ -4,6 +4,13 @@
 
 ### Changed
 
+- **Hybrid mtime+hash staleness detection for vector indexing**
+  - Staleness detection now uses content hashes (SHA-256) in addition to mtime
+  - Fast path: If mtime unchanged, file is assumed unchanged (no I/O needed)
+  - Hash check: If mtime changed, content hash is computed and compared
+  - Avoids unnecessary reindexing when files are touched but content is unchanged (git operations, sync tools, backups)
+  - Index version bumped to 3; existing v2 indexes will require full reindex on upgrade
+
 - **Embedding index moved to system cache directory**
   - Embeddings are now stored in a platform-appropriate cache directory instead of `data.json`
   - macOS: `~/Library/Caches/f9-obsidian-mcp/<vault-hash>/embeddings.json`

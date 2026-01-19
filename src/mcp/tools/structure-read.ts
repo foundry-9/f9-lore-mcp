@@ -6,9 +6,9 @@ import type { App } from "obsidian";
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import {
-  normalizeNotePath,
-  fileNotFoundJsonError,
+  getFileOrError,
   cacheNotAvailableError,
+  errorResult,
   jsonResponse,
 } from "../utils";
 import {
@@ -43,11 +43,9 @@ export function registerStructureReadTools(mcp: McpServer, app: App): void {
     },
     async (args) => {
       const { path, include_content } = args;
-      const normalizedPath = normalizeNotePath(path);
-      const file = app.vault.getFileByPath(normalizedPath);
-      if (!file) {
-        return fileNotFoundJsonError(normalizedPath);
-      }
+      const lookup = getFileOrError(app, path, true);
+      if ("error" in lookup) return lookup.error;
+      const { file, normalizedPath } = lookup;
 
       const noteContent = await app.vault.read(file);
       const cache = app.metadataCache.getFileCache(file);
@@ -83,11 +81,9 @@ export function registerStructureReadTools(mcp: McpServer, app: App): void {
     },
     async (args) => {
       const { path, section_id, freshnessToken } = args;
-      const normalizedPath = normalizeNotePath(path);
-      const file = app.vault.getFileByPath(normalizedPath);
-      if (!file) {
-        return fileNotFoundJsonError(normalizedPath);
-      }
+      const lookup = getFileOrError(app, path, true);
+      if ("error" in lookup) return lookup.error;
+      const { file } = lookup;
 
       const noteContent = await app.vault.read(file);
       const cache = app.metadataCache.getFileCache(file);
@@ -104,15 +100,7 @@ export function registerStructureReadTools(mcp: McpServer, app: App): void {
 
       const extracted = extractSectionContent(noteContent, section_id, cache);
       if (!extracted) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify({ error: "SECTION_NOT_FOUND", message: `Section not found: ${section_id}` }),
-            },
-          ],
-          isError: true,
-        };
+        return errorResult("SECTION_NOT_FOUND", section_id, true);
       }
 
       const newToken = createFreshnessToken(noteContent, file.stat.mtime);
@@ -141,11 +129,9 @@ export function registerStructureReadTools(mcp: McpServer, app: App): void {
     },
     async (args) => {
       const { path, heading_id, freshnessToken } = args;
-      const normalizedPath = normalizeNotePath(path);
-      const file = app.vault.getFileByPath(normalizedPath);
-      if (!file) {
-        return fileNotFoundJsonError(normalizedPath);
-      }
+      const lookup = getFileOrError(app, path, true);
+      if ("error" in lookup) return lookup.error;
+      const { file } = lookup;
 
       const noteContent = await app.vault.read(file);
       const cache = app.metadataCache.getFileCache(file);
@@ -161,15 +147,7 @@ export function registerStructureReadTools(mcp: McpServer, app: App): void {
 
       const extracted = extractHeadingContent(noteContent, heading_id, cache);
       if (!extracted) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify({ error: "HEADING_NOT_FOUND", message: `Heading not found: ${heading_id}` }),
-            },
-          ],
-          isError: true,
-        };
+        return errorResult("HEADING_NOT_FOUND", heading_id, true);
       }
 
       const newToken = createFreshnessToken(noteContent, file.stat.mtime);
@@ -198,11 +176,9 @@ export function registerStructureReadTools(mcp: McpServer, app: App): void {
     },
     async (args) => {
       const { path, keys } = args;
-      const normalizedPath = normalizeNotePath(path);
-      const file = app.vault.getFileByPath(normalizedPath);
-      if (!file) {
-        return fileNotFoundJsonError(normalizedPath);
-      }
+      const lookup = getFileOrError(app, path, true);
+      if ("error" in lookup) return lookup.error;
+      const { file } = lookup;
 
       const noteContent = await app.vault.read(file);
       const cache = app.metadataCache.getFileCache(file);

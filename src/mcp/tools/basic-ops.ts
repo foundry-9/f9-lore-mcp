@@ -10,6 +10,7 @@ import {
   fileNotFoundError,
   ensureParentFolder,
   textResponse,
+  getFileOrError,
 } from "../utils";
 
 /**
@@ -148,13 +149,10 @@ export function registerBasicOpsTools(mcp: McpServer, app: App): void {
     },
     async (args) => {
       const { path, content } = args;
-      const normalizedPath = normalizeNotePath(path);
-      const file = app.vault.getFileByPath(normalizedPath);
-      if (!file) {
-        return fileNotFoundError(normalizedPath);
-      }
-      await app.vault.modify(file, content);
-      return textResponse(`Updated note: ${normalizedPath}`);
+      const lookup = getFileOrError(app, path);
+      if ("error" in lookup) return lookup.error;
+      await app.vault.modify(lookup.file, content);
+      return textResponse(`Updated note: ${lookup.normalizedPath}`);
     }
   );
 
@@ -172,13 +170,10 @@ export function registerBasicOpsTools(mcp: McpServer, app: App): void {
     },
     async (args) => {
       const { path } = args;
-      const normalizedPath = normalizeNotePath(path);
-      const file = app.vault.getFileByPath(normalizedPath);
-      if (!file) {
-        return fileNotFoundError(normalizedPath);
-      }
-      await app.vault.trash(file, true);
-      return textResponse(`Deleted note: ${normalizedPath}`);
+      const lookup = getFileOrError(app, path);
+      if ("error" in lookup) return lookup.error;
+      await app.vault.trash(lookup.file, true);
+      return textResponse(`Deleted note: ${lookup.normalizedPath}`);
     }
   );
 
@@ -200,15 +195,12 @@ export function registerBasicOpsTools(mcp: McpServer, app: App): void {
     },
     async (args) => {
       const { from, to } = args;
-      const normalizedFrom = normalizeNotePath(from);
+      const lookup = getFileOrError(app, from);
+      if ("error" in lookup) return lookup.error;
       const normalizedTo = normalizeNotePath(to);
-      const file = app.vault.getFileByPath(normalizedFrom);
-      if (!file) {
-        return fileNotFoundError(normalizedFrom);
-      }
       await ensureParentFolder(app, normalizedTo);
-      await app.fileManager.renameFile(file, normalizedTo);
-      return textResponse(`Moved note from ${normalizedFrom} to ${normalizedTo}`);
+      await app.fileManager.renameFile(lookup.file, normalizedTo);
+      return textResponse(`Moved note from ${lookup.normalizedPath} to ${normalizedTo}`);
     }
   );
 }

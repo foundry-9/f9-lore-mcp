@@ -7,8 +7,7 @@ import type { App, TFile, CachedMetadata } from "obsidian";
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import {
-  normalizeNotePath,
-  fileNotFoundJsonError,
+  getFileOrError,
   editResultToToolResponse,
   type PerformEditResult,
 } from "../utils";
@@ -125,15 +124,12 @@ export function registerStructureWriteTools(mcp: McpServer, ctx: StructureWriteC
     },
     async (args) => {
       const { path, section_id, freshnessToken, content: newContent, verify } = args;
-      const normalizedPath = normalizeNotePath(path);
-      const file = app.vault.getFileByPath(normalizedPath);
-      if (!file) {
-        return fileNotFoundJsonError(normalizedPath);
-      }
+      const lookup = getFileOrError(app, path, true);
+      if ("error" in lookup) return lookup.error;
 
       const result = await performEdit(
         ctx,
-        file,
+        lookup.file,
         freshnessToken,
         (c, cache) => updateSectionContent(c, cache, section_id, newContent),
         verify
@@ -157,15 +153,12 @@ export function registerStructureWriteTools(mcp: McpServer, ctx: StructureWriteC
     },
     async (args) => {
       const { path, section_id, freshnessToken, verify } = args;
-      const normalizedPath = normalizeNotePath(path);
-      const file = app.vault.getFileByPath(normalizedPath);
-      if (!file) {
-        return fileNotFoundJsonError(normalizedPath);
-      }
+      const lookup = getFileOrError(app, path, true);
+      if ("error" in lookup) return lookup.error;
 
       const result = await performEdit(
         ctx,
-        file,
+        lookup.file,
         freshnessToken,
         (c, cache) => deleteSection(c, cache, section_id),
         verify
@@ -195,15 +188,12 @@ export function registerStructureWriteTools(mcp: McpServer, ctx: StructureWriteC
     },
     async (args) => {
       const { path, heading_id, freshnessToken, content: newContent, preserve_subheadings, verify } = args;
-      const normalizedPath = normalizeNotePath(path);
-      const file = app.vault.getFileByPath(normalizedPath);
-      if (!file) {
-        return fileNotFoundJsonError(normalizedPath);
-      }
+      const lookup = getFileOrError(app, path, true);
+      if ("error" in lookup) return lookup.error;
 
       const result = await performEdit(
         ctx,
-        file,
+        lookup.file,
         freshnessToken,
         (c, cache) => updateHeadingContent(c, cache, heading_id, newContent, preserve_subheadings),
         verify
@@ -234,15 +224,12 @@ export function registerStructureWriteTools(mcp: McpServer, ctx: StructureWriteC
     },
     async (args) => {
       const { path, heading_id, freshnessToken, new_text, new_level, verify } = args;
-      const normalizedPath = normalizeNotePath(path);
-      const file = app.vault.getFileByPath(normalizedPath);
-      if (!file) {
-        return fileNotFoundJsonError(normalizedPath);
-      }
+      const lookup = getFileOrError(app, path, true);
+      if ("error" in lookup) return lookup.error;
 
       const result = await performEdit(
         ctx,
-        file,
+        lookup.file,
         freshnessToken,
         (c, cache) => renameHeading(c, cache, heading_id, new_text, new_level),
         verify
@@ -271,11 +258,9 @@ export function registerStructureWriteTools(mcp: McpServer, ctx: StructureWriteC
     },
     async (args) => {
       const { path, list_item_id, freshnessToken, text, task_status, verify } = args;
-      const normalizedPath = normalizeNotePath(path);
-      const file = app.vault.getFileByPath(normalizedPath);
-      if (!file) {
-        return fileNotFoundJsonError(normalizedPath);
-      }
+      const lookup = getFileOrError(app, path, true);
+      if ("error" in lookup) return lookup.error;
+      const { file } = lookup;
 
       // Apply text update if provided
       let editResult: PerformEditResult = { success: true, freshnessToken, verified: false };
@@ -338,15 +323,12 @@ export function registerStructureWriteTools(mcp: McpServer, ctx: StructureWriteC
     },
     async (args) => {
       const { path, freshnessToken, updates, replace_all, verify } = args;
-      const normalizedPath = normalizeNotePath(path);
-      const file = app.vault.getFileByPath(normalizedPath);
-      if (!file) {
-        return fileNotFoundJsonError(normalizedPath);
-      }
+      const lookup = getFileOrError(app, path, true);
+      if ("error" in lookup) return lookup.error;
 
       const result = await performEdit(
         ctx,
-        file,
+        lookup.file,
         freshnessToken,
         (c, cache) => updateFrontmatter(c, cache, updates, replace_all),
         verify
@@ -382,15 +364,12 @@ export function registerStructureWriteTools(mcp: McpServer, ctx: StructureWriteC
     },
     async (args) => {
       const { path, freshnessToken, position, content: newContent, verify } = args;
-      const normalizedPath = normalizeNotePath(path);
-      const file = app.vault.getFileByPath(normalizedPath);
-      if (!file) {
-        return fileNotFoundJsonError(normalizedPath);
-      }
+      const lookup = getFileOrError(app, path, true);
+      if ("error" in lookup) return lookup.error;
 
       const result = await performEdit(
         ctx,
-        file,
+        lookup.file,
         freshnessToken,
         (c, cache) => insertContent(c, cache, position as InsertPosition, newContent),
         verify

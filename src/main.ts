@@ -3,6 +3,7 @@ import { LoreMcpHost, McpConfig } from "./mcp/host";
 import { VectorIndexer } from "./vector/indexer";
 import { VectorSearchSettings, DEFAULT_VECTOR_SETTINGS } from "./vector/types";
 import type { ExtendedIndexingStatus } from "./vector/types";
+import { truncateString } from "./mcp/utils";
 
 interface F9LoreMCPSettings {
   mcpEnabled: boolean;
@@ -36,12 +37,19 @@ const DEFAULT_SETTINGS: F9LoreMCPSettings = {
 
 const MCP_RESTART_DEBOUNCE_MS = 2000;
 
+/** Which accordion to auto-open when settings are displayed */
+export type PendingAccordion = "mcp" | "vector" | null;
+
 export default class F9LoreMCPPlugin extends Plugin {
   settings!: F9LoreMCPSettings;
   mcpHost?: LoreMcpHost;
   vectorIndexer?: VectorIndexer;
   private statusBarItem?: HTMLElement;
   private mcpRestartTimer?: ReturnType<typeof setTimeout>;
+  /** Tracks which accordion should be opened next time settings are displayed */
+  pendingAccordion: PendingAccordion = null;
+  /** Last MCP error message for display in settings */
+  lastMcpError: string | null = null;
 
   /** Icons for different health states */
   private readonly STATUS_ICONS = {
@@ -114,6 +122,8 @@ export default class F9LoreMCPPlugin extends Plugin {
     ribbon.addClass("f9-lore-mcp-ribbon-icon");
 
     this.statusBarItem = this.addStatusBarItem();
+    this.statusBarItem.addClass("mod-clickable");
+    this.statusBarItem.addEventListener("click", () => this.openSettingsWithContext());
     this.updateStatusBar();
 
     // Update status bar frequently for responsive spinner animation
@@ -225,11 +235,14 @@ export default class F9LoreMCPPlugin extends Plugin {
     if (cfg.enabled) {
       try {
         await this.mcpHost.restart(cfg);
+        this.lastMcpError = null; // Clear error on successful start
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
+        this.lastMcpError = message;
         new Notice(`MCP Server Error: ${message}`);
       }
     } else {
+      this.lastMcpError = null; // Clear error when disabled
       await this.mcpHost.stop();
     }
   }
@@ -296,10 +309,7 @@ export default class F9LoreMCPPlugin extends Plugin {
     if (status?.progress) {
       lines.push("");
       lines.push(`Indexing: ${status.progress.current}/${status.progress.total}`);
-      const displayPath = status.progress.currentFile.length > 40
-        ? "..." + status.progress.currentFile.slice(-37)
-        : status.progress.currentFile;
-      lines.push(`Current: ${displayPath}`);
+      lines.push(`Current: ${truncateString(status.progress.currentFile, 40, true)}`);
     } else if (status?.pendingCount && status.pendingCount > 0) {
       lines.push("");
       lines.push(`${status.pendingCount} file${status.pendingCount !== 1 ? "s" : ""} pending`);
@@ -314,15 +324,9 @@ export default class F9LoreMCPPlugin extends Plugin {
         const ageStr = ageSec < 60 ? `${ageSec}s` : `${Math.floor(ageSec / 60)}m`;
         lines.push(`Error (${ageStr} ago):`);
         if (status.lastError.filePath) {
-          const path = status.lastError.filePath.length > 35
-            ? "..." + status.lastError.filePath.slice(-32)
-            : status.lastError.filePath;
-          lines.push(path);
+          lines.push(truncateString(status.lastError.filePath, 35, true));
         }
-        const msg = status.lastError.message.length > 50
-          ? status.lastError.message.slice(0, 47) + "..."
-          : status.lastError.message;
-        lines.push(msg);
+        lines.push(truncateString(status.lastError.message, 50));
       }
     }
 
@@ -342,6 +346,34 @@ export default class F9LoreMCPPlugin extends Plugin {
 
     setTooltip(this.statusBarItem, lines.join("\n"), { placement: "top" });
   }
+
+  /**
+   * Open plugin settings, auto-expanding the appropriate accordion based on current errors.
+   */
+  openSettingsWithContext(): void {
+    // Determine which accordion to open based on current state
+    if (this.lastMcpError) {
+      this.pendingAccordion = "mcp";
+    } else {
+      const status = this.vectorIndexer?.getIndexingStatus();
+      const stats = this.vectorIndexer?.getStats();
+      const hasDrift = stats?.tfidfDrift && stats.tfidfDrift.unknownTermsCount > 0;
+      const hasRecentError = status?.lastError &&
+        Date.now() - status.lastError.timestamp < 5 * 60 * 1000;
+
+      if (hasRecentError || hasDrift) {
+        this.pendingAccordion = "vector";
+      } else {
+        this.pendingAccordion = null;
+      }
+    }
+
+    // Open settings and navigate to this plugin's tab
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const setting = (this.app as any).setting;
+    setting.open();
+    setting.openTabById(this.manifest.id);
+  }
 }
 
 class F9LoreMCPSettingTab extends PluginSettingTab {
@@ -359,13 +391,17 @@ class F9LoreMCPSettingTab extends PluginSettingTab {
     const { containerEl } = this;
     containerEl.empty();
 
+    // Capture and clear the pending accordion (one-time use)
+    const openAccordion = this.plugin.pendingAccordion;
+    this.plugin.pendingAccordion = null;
+
     containerEl.createEl("h2", { text: "F9 Lore MCP Settings" });
 
     // Status section at the top
     this.renderStatusSection(containerEl);
 
     // MCP Settings accordion
-    this.renderAccordion(containerEl, "MCP Server Settings", false, (content) => {
+    this.renderAccordion(containerEl, "MCP Server Settings", openAccordion === "mcp", (content) => {
       this.renderMcpSettings(content);
     });
 
@@ -375,7 +411,7 @@ class F9LoreMCPSettingTab extends PluginSettingTab {
     });
 
     // Vector Search Settings accordion
-    this.renderAccordion(containerEl, "Vector Search Settings", false, (content) => {
+    this.renderAccordion(containerEl, "Vector Search Settings", openAccordion === "vector", (content) => {
       this.renderVectorSearchSettings(content);
     });
 
@@ -464,20 +500,29 @@ class F9LoreMCPSettingTab extends PluginSettingTab {
 
     // MCP Status row
     const mcpRow = statusContainer.createEl("div", { cls: "f9-status-row" });
-    const mcpIcon = mcpRunning ? "\u2713" : "\u2716"; // ✓ or ✖
+    const hasMcpError = !!this.plugin.lastMcpError;
+    const mcpIcon = mcpRunning ? "\u2713" : hasMcpError ? "\u2716" : "\u2716"; // ✓ or ✖
     const mcpStatus = mcpRunning
       ? `Listening on port ${this.plugin.settings.mcpPort}`
-      : this.plugin.settings.mcpEnabled
-        ? "Starting..."
-        : "Disabled";
+      : hasMcpError
+        ? "Error"
+        : this.plugin.settings.mcpEnabled
+          ? "Starting..."
+          : "Disabled";
     mcpRow.createEl("span", {
       text: `${mcpIcon} MCP: ${mcpStatus}`,
-      cls: mcpRunning ? "f9-status-ok" : "f9-status-off",
+      cls: mcpRunning ? "f9-status-ok" : hasMcpError ? "f9-status-error" : "f9-status-off",
     });
     if (mcpRunning) {
       mcpRow.createEl("span", {
         text: ` | ${sessionCount} session${sessionCount !== 1 ? "s" : ""}`,
         cls: "f9-status-detail",
+      });
+    }
+    if (hasMcpError) {
+      mcpRow.createEl("span", {
+        text: ` | ${truncateString(this.plugin.lastMcpError!, 50)}`,
+        cls: "f9-status-error",
       });
     }
 

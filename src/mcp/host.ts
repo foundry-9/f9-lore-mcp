@@ -108,21 +108,43 @@ export class LoreMcpHost {
   }
 
   /**
+   * Parse a clientKey back into its components.
+   */
+  private parseClientKey(clientKey: string): { ip: string; userAgent: string } {
+    const colonIndex = clientKey.indexOf(":");
+    if (colonIndex === -1) {
+      return { ip: clientKey, userAgent: "" };
+    }
+    return {
+      ip: clientKey.substring(0, colonIndex),
+      userAgent: clientKey.substring(colonIndex + 1),
+    };
+  }
+
+  /**
+   * Close and remove sessions matching a predicate.
+   * Collects matching session IDs first to avoid modifying the map during iteration.
+   */
+  private async cleanupSessionsWhere(
+    predicate: (sessionId: string, session: McpSession) => boolean
+  ): Promise<void> {
+    const sessionsToClose: string[] = [];
+    for (const [sessionId, session] of this.sessions) {
+      if (predicate(sessionId, session)) {
+        sessionsToClose.push(sessionId);
+      }
+    }
+    for (const sessionId of sessionsToClose) {
+      await this.closeSession(sessionId);
+    }
+  }
+
+  /**
    * Close and remove all sessions belonging to a specific client.
    * Called when a new session is created to ensure only one session per client.
    */
   private async cleanupClientSessions(clientKey: string): Promise<void> {
-    const sessionsToClose: string[] = [];
-
-    for (const [sessionId, session] of this.sessions) {
-      if (session.clientKey === clientKey) {
-        sessionsToClose.push(sessionId);
-      }
-    }
-
-    for (const sessionId of sessionsToClose) {
-      await this.closeSession(sessionId);
-    }
+    await this.cleanupSessionsWhere((_, session) => session.clientKey === clientKey);
   }
 
   /**
@@ -131,17 +153,7 @@ export class LoreMcpHost {
   private async cleanupExpiredSessions(): Promise<void> {
     const timeoutMs = (this.config.sessionTimeoutMinutes ?? DEFAULT_SESSION_TIMEOUT_MINUTES) * 60 * 1000;
     const now = Date.now();
-    const expiredSessions: string[] = [];
-
-    for (const [sessionId, session] of this.sessions) {
-      if (now - session.lastActivity > timeoutMs) {
-        expiredSessions.push(sessionId);
-      }
-    }
-
-    for (const sessionId of expiredSessions) {
-      await this.closeSession(sessionId);
-    }
+    await this.cleanupSessionsWhere((_, session) => now - session.lastActivity > timeoutMs);
   }
 
   /**
@@ -253,10 +265,7 @@ export class LoreMcpHost {
         } else if (url === "/health") {
           const sessionList = [];
           for (const [sessionId, session] of this.sessions) {
-            // clientKey format is "ip:userAgent"
-            const colonIndex = session.clientKey.indexOf(":");
-            const ip = colonIndex > -1 ? session.clientKey.substring(0, colonIndex) : session.clientKey;
-            const userAgent = colonIndex > -1 ? session.clientKey.substring(colonIndex + 1) : "";
+            const { ip, userAgent } = this.parseClientKey(session.clientKey);
             sessionList.push({
               id: sessionId,
               ip,

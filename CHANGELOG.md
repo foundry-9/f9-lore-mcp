@@ -2,7 +2,22 @@
 
 ## [Unreleased]
 
+### Added
+
+- **Clickable status bar** opens plugin settings with context-aware accordion expansion
+  - Click the F9 status bar item to open plugin settings
+  - If an MCP error occurred, the MCP Server Settings accordion auto-expands
+  - If a vector search error or TF-IDF vocabulary drift is detected, the Vector Search Settings accordion auto-expands
+  - MCP errors are now tracked and displayed in the status section with error styling
+
 ### Changed
+
+- **Internal refactoring** for improved code maintainability (DRY, SRP)
+  - Created `errorResult()` factory function with typed `ErrorCode` to consolidate error response handling
+  - Added `getFileOrError()` helper to eliminate 20+ instances of duplicate path normalization and file lookup
+  - Added `truncateString()` utility function replacing scattered truncation logic
+  - Unified session cleanup in `LoreMcpHost` with predicate-based `cleanupSessionsWhere()` method
+  - Added `parseClientKey()` helper to encapsulate client identity parsing
 
 - **Settings UI redesigned** with hierarchical accordion layout
   - Status section at top showing: MCP listening status, port, active sessions, index file/chunk counts, indexing progress, and embedding provider

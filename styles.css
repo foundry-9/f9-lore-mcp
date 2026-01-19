@@ -30,6 +30,11 @@
   color: var(--text-muted);
 }
 
+.f9-status-error {
+  color: var(--text-error);
+  font-weight: 500;
+}
+
 .f9-status-detail {
   color: var(--text-muted);
 }

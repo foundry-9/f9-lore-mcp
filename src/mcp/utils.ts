@@ -23,96 +23,150 @@ export function normalizeFolderPath(path: string): string {
 }
 
 // ============================================================================
+// String Utilities
+// ============================================================================
+
+/**
+ * Truncate a string with ellipsis, optionally from the start.
+ * @param str - String to truncate
+ * @param maxLen - Maximum length including ellipsis
+ * @param fromStart - If true, truncates from start (keeps end); otherwise truncates from end
+ */
+export function truncateString(str: string, maxLen: number, fromStart = false): string {
+  if (str.length <= maxLen) return str;
+  const ellipsis = "...";
+  const availableLen = maxLen - ellipsis.length;
+  if (availableLen <= 0) return ellipsis.slice(0, maxLen);
+  return fromStart
+    ? ellipsis + str.slice(-availableLen)
+    : str.slice(0, availableLen) + ellipsis;
+}
+
+// ============================================================================
 // Tool Result Types
 // ============================================================================
 
 export interface ToolResult {
+  [key: string]: unknown;
   content: Array<{ type: "text"; text: string }>;
   isError?: boolean;
 }
 
 // ============================================================================
-// Error Response Helpers
+// Error Response Factory
 // ============================================================================
 
+/** Error codes used across MCP tools */
+export type ErrorCode =
+  | "FILE_NOT_FOUND"
+  | "FOLDER_NOT_FOUND"
+  | "PATH_NOT_FOUND"
+  | "NO_CACHE"
+  | "SECTION_NOT_FOUND"
+  | "HEADING_NOT_FOUND"
+  | "STALE_TOKEN"
+  | "TARGET_NOT_FOUND"
+  | "VECTOR_NOT_CONFIGURED"
+  | "PROVIDER_UNAVAILABLE";
+
+/** Default messages for each error code */
+const ERROR_MESSAGES: Record<ErrorCode, string> = {
+  FILE_NOT_FOUND: "Note not found",
+  FOLDER_NOT_FOUND: "Folder not found",
+  PATH_NOT_FOUND: "Path not found",
+  NO_CACHE: "Metadata cache not available",
+  SECTION_NOT_FOUND: "Section not found",
+  HEADING_NOT_FOUND: "Heading not found",
+  STALE_TOKEN: "File has changed since last read. Please re-read the file structure.",
+  TARGET_NOT_FOUND: "Edit operation failed - target not found",
+  VECTOR_NOT_CONFIGURED: "Vector search is not configured",
+  PROVIDER_UNAVAILABLE: "Embedding provider is not available. Check your settings.",
+};
+
 /**
- * Create a "file not found" error response (plain text).
+ * Create an error response with consistent formatting.
+ * @param code - Error code for programmatic handling
+ * @param context - Additional context (e.g., path, ID) to append to message
+ * @param json - If true, returns JSON format; otherwise plain text
  */
+export function errorResult(code: ErrorCode, context?: string, json = false): ToolResult {
+  const baseMessage = ERROR_MESSAGES[code];
+  const message = context ? `${baseMessage}: ${context}` : baseMessage;
+
+  if (json) {
+    return {
+      content: [{ type: "text", text: JSON.stringify({ error: code, message }) }],
+      isError: true,
+    };
+  }
+
+  return {
+    content: [{ type: "text", text: message }],
+    isError: true,
+  };
+}
+
+// ============================================================================
+// Convenience Error Helpers (for backwards compatibility and brevity)
+// ============================================================================
+
 export function fileNotFoundError(path: string): ToolResult {
-  return {
-    content: [{ type: "text", text: `Note not found: ${path}` }],
-    isError: true,
-  };
+  return errorResult("FILE_NOT_FOUND", path);
 }
 
-/**
- * Create a "file not found" error response (JSON format).
- */
 export function fileNotFoundJsonError(path: string): ToolResult {
-  return {
-    content: [
-      {
-        type: "text",
-        text: JSON.stringify({ error: "FILE_NOT_FOUND", message: `Note not found: ${path}` }),
-      },
-    ],
-    isError: true,
-  };
+  return errorResult("FILE_NOT_FOUND", path, true);
 }
 
-/**
- * Create a "folder not found" error response (plain text).
- */
 export function folderNotFoundError(path: string): ToolResult {
-  return {
-    content: [{ type: "text", text: `Folder not found: ${path}` }],
-    isError: true,
-  };
+  return errorResult("FOLDER_NOT_FOUND", path);
 }
 
-/**
- * Create a "path not found" error response.
- */
 export function pathNotFoundError(path: string): ToolResult {
-  return {
-    content: [{ type: "text", text: `Path not found: ${path}` }],
-    isError: true,
-  };
+  return errorResult("PATH_NOT_FOUND", path);
 }
 
-/**
- * Create a "cache not available" error response (JSON format).
- */
 export function cacheNotAvailableError(): ToolResult {
-  return {
-    content: [
-      {
-        type: "text",
-        text: JSON.stringify({ error: "NO_CACHE", message: "Metadata cache not available" }),
-      },
-    ],
-    isError: true,
-  };
+  return errorResult("NO_CACHE", undefined, true);
 }
 
-/**
- * Create a "vector search not configured" error response.
- */
 export function vectorSearchNotConfiguredError(): ToolResult {
-  return {
-    content: [{ type: "text", text: "Vector search is not configured" }],
-    isError: true,
-  };
+  return errorResult("VECTOR_NOT_CONFIGURED");
+}
+
+export function providerNotAvailableError(): ToolResult {
+  return errorResult("PROVIDER_UNAVAILABLE");
+}
+
+// ============================================================================
+// File Lookup Helper
+// ============================================================================
+
+export interface FileOrError {
+  file: TFile;
+  normalizedPath: string;
 }
 
 /**
- * Create a "provider not available" error response.
+ * Normalize a path and look up the file, returning an error result if not found.
+ * Eliminates the repeated pattern of normalize -> lookup -> error check.
+ *
+ * @param app - Obsidian App instance
+ * @param path - Raw path from tool arguments
+ * @param jsonError - If true, returns JSON-formatted error; otherwise plain text
+ * @returns Either { file, normalizedPath } or { error: ToolResult }
  */
-export function providerNotAvailableError(): ToolResult {
-  return {
-    content: [{ type: "text", text: "Embedding provider is not available. Check your settings." }],
-    isError: true,
-  };
+export function getFileOrError(
+  app: App,
+  path: string,
+  jsonError = false
+): FileOrError | { error: ToolResult } {
+  const normalizedPath = normalizeNotePath(path);
+  const file = app.vault.getFileByPath(normalizedPath);
+  if (!file) {
+    return { error: jsonError ? fileNotFoundJsonError(normalizedPath) : fileNotFoundError(normalizedPath) };
+  }
+  return { file, normalizedPath };
 }
 
 // ============================================================================

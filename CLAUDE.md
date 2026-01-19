@@ -130,3 +130,7 @@ No test framework is configured yet.
 - `@modelcontextprotocol/sdk` - MCP server implementation
 - `zod` - Tool argument validation
 - `obsidian` - Obsidian API types (dev dependency, external at runtime)
+
+## Policies
+
+- **IMPORTANT**: This plugin must adhere to all policies found for plugins at [Obsidian Developer Docs](https://docs.obsidian.md/Home) except where otherwise noted

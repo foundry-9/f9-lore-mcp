@@ -8,6 +8,9 @@ import type {
   VectorSearchSettings,
   SearchResult,
   ChunkEmbedding,
+  ExtendedIndexingStatus,
+  IndexingError,
+  PluginHealthState,
 } from "./types";
 import { createEmptyIndex, EMBEDDING_INDEX_VERSION } from "./types";
 import { chunkMarkdown } from "./chunker";
@@ -91,6 +94,12 @@ export class VectorIndexer {
   private saveDebounceTimer?: ReturnType<typeof setTimeout>;
   /** Track if there are unsaved changes that need to be persisted */
   private hasPendingSave = false;
+  /** Current file being indexed (for progress display) */
+  private currentFile: string | null = null;
+  /** Progress of current bulk indexing operation */
+  private indexingProgress: { current: number; total: number } | null = null;
+  /** Last indexing error (for status display) */
+  private lastError: IndexingError | null = null;
 
   constructor(
     private app: App,
@@ -513,6 +522,8 @@ export class VectorIndexer {
       // Second pass (or only pass for non-TF-IDF): index each file
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
+        this.currentFile = file.path;
+        this.indexingProgress = { current: i + 1, total: files.length };
         progressCallback?.(file.path, i + 1, files.length);
 
         try {
@@ -521,12 +532,19 @@ export class VectorIndexer {
           const message = err instanceof Error ? err.message : String(err);
           errors.push(`${file.path}: ${message}`);
           console.error(`F9 MCP: Failed to index ${file.path}:`, err);
+          this.lastError = {
+            timestamp: Date.now(),
+            filePath: file.path,
+            message,
+          };
         }
       }
 
       await this.saveIndex();
     } finally {
       this.isIndexing = false;
+      this.currentFile = null;
+      this.indexingProgress = null;
     }
 
     return { indexed: files.length - errors.length, errors };
@@ -610,6 +628,7 @@ export class VectorIndexer {
       return;
     }
 
+    this.currentFile = path;
     try {
       // Check if content has actually changed using hash comparison
       const storedHash = this.index.fileHashes[path];
@@ -621,6 +640,7 @@ export class VectorIndexer {
           this.index.fileMtimes[path] = file.stat.mtime;
           this.scheduleSave();
           this.isIndexing = false;
+          this.currentFile = null;
           return;
         }
       }
@@ -629,9 +649,16 @@ export class VectorIndexer {
       await this.indexFile(file);
       await this.saveIndex();
     } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
       console.error(`F9 MCP: Failed to index ${path}:`, err);
+      this.lastError = {
+        timestamp: Date.now(),
+        filePath: path,
+        message,
+      };
     } finally {
       this.isIndexing = false;
+      this.currentFile = null;
     }
   }
 
@@ -657,13 +684,23 @@ export class VectorIndexer {
     console.log(`F9 MCP: Processing ${paths.length} pending files`);
 
     try {
-      for (const path of paths) {
+      for (let i = 0; i < paths.length; i++) {
+        const path = paths[i];
+        this.currentFile = path;
+        this.indexingProgress = { current: i + 1, total: paths.length };
+
         const file = this.app.vault.getFileByPath(path);
         if (file) {
           try {
             await this.indexFile(file);
           } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
             console.error(`F9 MCP: Failed to index ${path}:`, err);
+            this.lastError = {
+              timestamp: Date.now(),
+              filePath: path,
+              message,
+            };
           }
         }
       }
@@ -671,6 +708,8 @@ export class VectorIndexer {
       await this.saveIndex();
     } finally {
       this.isIndexing = false;
+      this.currentFile = null;
+      this.indexingProgress = null;
     }
   }
 
@@ -768,11 +807,33 @@ export class VectorIndexer {
   /**
    * Get the current indexing status for status bar display.
    */
-  getIndexingStatus(): { isIndexing: boolean; pendingCount: number } {
+  getIndexingStatus(): ExtendedIndexingStatus {
+    let healthState: PluginHealthState = "ok";
+
+    if (this.isIndexing || this.pendingFiles.size > 0) {
+      healthState = "busy";
+    } else if (this.lastError && Date.now() - this.lastError.timestamp < 5 * 60 * 1000) {
+      healthState = "warning";
+    }
+
     return {
       isIndexing: this.isIndexing,
       pendingCount: this.pendingFiles.size,
+      progress: this.indexingProgress && this.currentFile ? {
+        current: this.indexingProgress.current,
+        total: this.indexingProgress.total,
+        currentFile: this.currentFile,
+      } : undefined,
+      lastError: this.lastError ?? undefined,
+      healthState,
     };
+  }
+
+  /**
+   * Clear the last error (e.g., after user acknowledges it).
+   */
+  clearLastError(): void {
+    this.lastError = null;
   }
 
   /**

@@ -4,6 +4,22 @@
 
 ### Changed
 
+- **Rich status bar indicator** with animated spinner and detailed tooltips
+  - Animated spinner icon during indexing operations (spinning circle phases)
+  - Checkmark (✓) when idle and healthy
+  - Warning icon (⚠) when errors occurred in the last 5 minutes
+  - Progress display shows "X/Y" during bulk indexing operations
+  - Hover tooltip shows:
+    - Port number and MCP session count
+    - Current file being indexed (truncated if too long)
+    - Number of pending files
+    - Recent error details with age and file path
+    - Index statistics (file count, chunk count)
+    - Current embedding provider
+  - Status bar updates every 500ms for responsive spinner animation
+
+### Changed
+
 - **Plugin renamed** from "F9 Obsidian MCP" to "F9 Lore MCP"
   - ID changed from `f9-obsidian-mcp` to `f9-lore-mcp` (complies with plugin guidelines: no "obsidian" in ID/name)
   - Cache directory changed from `f9-obsidian-mcp` to `f9-lore-mcp`

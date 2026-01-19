@@ -101,3 +101,26 @@ export function createEmptyIndex(providerKey: string): EmbeddingIndex {
     chunks: [],
   };
 }
+
+/** Plugin health state for status display */
+export type PluginHealthState = "ok" | "busy" | "warning" | "error";
+
+/** Structured error for display */
+export interface IndexingError {
+  timestamp: number;
+  filePath?: string;
+  message: string;
+}
+
+/** Extended indexing status with progress and error info */
+export interface ExtendedIndexingStatus {
+  isIndexing: boolean;
+  pendingCount: number;
+  progress?: {
+    current: number;
+    total: number;
+    currentFile: string;
+  };
+  lastError?: IndexingError;
+  healthState: PluginHealthState;
+}

@@ -1,7 +1,8 @@
-import { App, Notice, Plugin, PluginSettingTab, Setting, TFile } from "obsidian";
+import { App, Notice, Plugin, PluginSettingTab, Setting, TFile, setTooltip } from "obsidian";
 import { LoreMcpHost, McpConfig } from "./mcp/host";
 import { VectorIndexer } from "./vector/indexer";
 import { VectorSearchSettings, DEFAULT_VECTOR_SETTINGS } from "./vector/types";
+import type { ExtendedIndexingStatus } from "./vector/types";
 
 interface F9LoreMCPSettings {
   mcpEnabled: boolean;
@@ -41,6 +42,16 @@ export default class F9LoreMCPPlugin extends Plugin {
   vectorIndexer?: VectorIndexer;
   private statusBarItem?: HTMLElement;
   private mcpRestartTimer?: ReturnType<typeof setTimeout>;
+
+  /** Icons for different health states */
+  private readonly STATUS_ICONS = {
+    ok: "\u2713",      // ✓
+    busy: ["\u25D0", "\u25D3", "\u25D1", "\u25D2"], // spinning circle phases
+    warning: "\u26A0", // ⚠
+    error: "\u2716",   // ✖
+  };
+  /** Current frame of the spinner animation */
+  private spinnerFrame = 0;
 
   async onload() {
     console.log("Loading plugin: F9 Lore MCP");
@@ -106,9 +117,9 @@ export default class F9LoreMCPPlugin extends Plugin {
     this.statusBarItem = this.addStatusBarItem();
     this.updateStatusBar();
 
-    // Update status bar every 2 seconds
+    // Update status bar frequently for responsive spinner animation
     this.registerInterval(
-      window.setInterval(() => this.updateStatusBar(), 2000)
+      window.setInterval(() => this.updateStatusBar(), 500)
     );
 
     this.addCommand({
@@ -234,29 +245,97 @@ export default class F9LoreMCPPlugin extends Plugin {
   private updateStatusBar(): void {
     if (!this.statusBarItem) return;
 
-    const parts: string[] = [`F9 MCP:${this.settings.mcpPort}`];
+    const status = this.vectorIndexer?.getIndexingStatus();
+    const mcpRunning = this.mcpHost?.isRunning() ?? false;
 
-    // Add session count if MCP is running
-    if (this.mcpHost?.isRunning()) {
-      const sessionCount = this.mcpHost.getSessionCount();
-      parts.push(`${sessionCount} session${sessionCount !== 1 ? "s" : ""}`);
-    } else if (this.settings.mcpEnabled) {
-      parts.push("starting...");
+    // Determine icon based on health state
+    let icon: string;
+    const healthState = status?.healthState ?? "ok";
+    if (healthState === "busy") {
+      this.spinnerFrame = (this.spinnerFrame + 1) % this.STATUS_ICONS.busy.length;
+      icon = this.STATUS_ICONS.busy[this.spinnerFrame];
     } else {
-      parts.push("off");
+      icon = this.STATUS_ICONS[healthState];
     }
 
-    // Add indexing status
-    if (this.vectorIndexer) {
-      const indexStatus = this.vectorIndexer.getIndexingStatus();
-      if (indexStatus.isIndexing) {
-        parts.push("indexing...");
-      } else if (indexStatus.pendingCount > 0) {
-        parts.push(`${indexStatus.pendingCount} pending`);
+    // Build display text
+    const parts: string[] = [`${icon} F9`];
+
+    // Add progress or pending count
+    if (status?.progress) {
+      parts.push(`${status.progress.current}/${status.progress.total}`);
+    } else if (status?.pendingCount && status.pendingCount > 0) {
+      parts.push(`${status.pendingCount} pending`);
+    }
+
+    this.statusBarItem.setText(parts.join(" "));
+
+    // Update tooltip with detailed information
+    this.updateTooltip(status, mcpRunning);
+  }
+
+  private updateTooltip(
+    status: ExtendedIndexingStatus | undefined,
+    mcpRunning: boolean
+  ): void {
+    if (!this.statusBarItem) return;
+
+    const lines: string[] = [];
+    lines.push(`F9 Lore MCP - Port ${this.settings.mcpPort}`);
+
+    // MCP status
+    if (mcpRunning) {
+      const sessionCount = this.mcpHost!.getSessionCount();
+      lines.push(`MCP: ${sessionCount} session${sessionCount !== 1 ? "s" : ""}`);
+    } else if (this.settings.mcpEnabled) {
+      lines.push("MCP: Starting...");
+    } else {
+      lines.push("MCP: Disabled");
+    }
+
+    // Indexing status
+    if (status?.progress) {
+      lines.push("");
+      lines.push(`Indexing: ${status.progress.current}/${status.progress.total}`);
+      const displayPath = status.progress.currentFile.length > 40
+        ? "..." + status.progress.currentFile.slice(-37)
+        : status.progress.currentFile;
+      lines.push(`Current: ${displayPath}`);
+    } else if (status?.pendingCount && status.pendingCount > 0) {
+      lines.push("");
+      lines.push(`${status.pendingCount} file${status.pendingCount !== 1 ? "s" : ""} pending`);
+    }
+
+    // Show last error if recent (within 5 minutes)
+    if (status?.lastError) {
+      const ageMs = Date.now() - status.lastError.timestamp;
+      if (ageMs < 5 * 60 * 1000) {
+        lines.push("");
+        const ageSec = Math.floor(ageMs / 1000);
+        const ageStr = ageSec < 60 ? `${ageSec}s` : `${Math.floor(ageSec / 60)}m`;
+        lines.push(`Error (${ageStr} ago):`);
+        if (status.lastError.filePath) {
+          const path = status.lastError.filePath.length > 35
+            ? "..." + status.lastError.filePath.slice(-32)
+            : status.lastError.filePath;
+          lines.push(path);
+        }
+        const msg = status.lastError.message.length > 50
+          ? status.lastError.message.slice(0, 47) + "..."
+          : status.lastError.message;
+        lines.push(msg);
       }
     }
 
-    this.statusBarItem.setText(parts.join(" | "));
+    // Index stats and embedding provider
+    const stats = this.vectorIndexer?.getStats();
+    if (stats) {
+      lines.push("");
+      lines.push(`Index: ${stats.fileCount} files, ${stats.chunkCount} chunks`);
+      lines.push(`Embedding: ${stats.providerKey}`);
+    }
+
+    setTooltip(this.statusBarItem, lines.join("\n"), { placement: "top" });
   }
 }
 

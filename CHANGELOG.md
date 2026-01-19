@@ -23,6 +23,14 @@
 
 ### Fixed
 
+- **Unnecessary re-embedding when file modify events fire without content changes**
+  - Obsidian fires "modify" events during startup for some files even when content hasn't changed
+  - Previously, any modify event triggered re-embedding after the debounce period
+  - Now compares content hash before re-embedding; skips if hash matches stored value
+  - Mtime-only updates are batched with a 2-second debounce to avoid repeated saves
+  - Also fixes mtime-only updates not being persisted after `checkForStaleFiles()`
+  - Added error handling around async save operations to surface failures in console
+
 - **`refresh_index` and `reindex_vault` tools broken due to renamed method**
   - Tools were calling non-existent `checkOllamaConnection()` method on VectorIndexer
   - Method was renamed to `checkProviderConnection()` when multi-provider support was added

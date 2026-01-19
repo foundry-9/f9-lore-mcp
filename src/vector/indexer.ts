@@ -87,6 +87,10 @@ export class VectorIndexer {
   /** Per-file debounce timers - each file gets its own timer */
   private fileDebounceTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
   private isIndexing = false;
+  /** Debounce timer for batching save operations */
+  private saveDebounceTimer?: ReturnType<typeof setTimeout>;
+  /** Track if there are unsaved changes that need to be persisted */
+  private hasPendingSave = false;
 
   constructor(
     private app: App,
@@ -128,6 +132,9 @@ export class VectorIndexer {
     const vaultPath = this.getVaultPath();
     const cacheFilePath = getCacheFilePath(vaultPath);
 
+    console.log(`F9 MCP: Loading index for provider ${currentProviderKey}`);
+    console.log(`F9 MCP: Cache file path: ${cacheFilePath}`);
+
     // Try loading from cache file first
     try {
       const cacheContent = await fs.readFile(cacheFilePath, "utf-8");
@@ -144,7 +151,8 @@ export class VectorIndexer {
           );
           this.index = createEmptyIndex(currentProviderKey);
         } else {
-          console.log(`F9 MCP: Loaded embedding index from cache (${stored.chunks.length} chunks)`);
+          const fileCount = Object.keys(stored.fileMtimes).length;
+          console.log(`F9 MCP: Loaded embedding index from cache (${stored.chunks.length} chunks, ${fileCount} files)`);
           this.index = stored;
           // Load TF-IDF state if present and using TF-IDF provider
           this.loadTfidfState();
@@ -154,8 +162,10 @@ export class VectorIndexer {
         await this.cleanupLegacyData();
         return;
       }
-    } catch {
+    } catch (err) {
       // Cache file doesn't exist or is invalid, check for legacy data
+      const message = err instanceof Error ? err.message : String(err);
+      console.log(`F9 MCP: No cache file found or invalid (${message}), checking legacy data`);
     }
 
     // Try loading from legacy data.json for migration
@@ -267,7 +277,40 @@ export class VectorIndexer {
     await fs.mkdir(cacheDir, { recursive: true });
 
     // Write index to cache file
+    const fileCount = Object.keys(this.index.fileMtimes).length;
+    console.log(`F9 MCP: Saving index to ${cacheFilePath} (${this.index.chunks.length} chunks, ${fileCount} files)`);
     await fs.writeFile(cacheFilePath, JSON.stringify(this.index), "utf-8");
+
+    // Clear pending save flag since we just saved
+    this.hasPendingSave = false;
+    if (this.saveDebounceTimer) {
+      clearTimeout(this.saveDebounceTimer);
+      this.saveDebounceTimer = undefined;
+    }
+  }
+
+  /**
+   * Schedule a debounced save operation.
+   * Multiple calls within the debounce window will be batched into a single save.
+   * Use this for mtime-only updates that don't require immediate persistence.
+   */
+  private scheduleSave(): void {
+    this.hasPendingSave = true;
+
+    // Clear existing timer
+    if (this.saveDebounceTimer) {
+      clearTimeout(this.saveDebounceTimer);
+    }
+
+    // Schedule save after 2 seconds of inactivity
+    this.saveDebounceTimer = setTimeout(() => {
+      this.saveDebounceTimer = undefined;
+      if (this.hasPendingSave) {
+        this.saveIndex().catch((err) => {
+          console.error("F9 MCP: Error in scheduled save:", err);
+        });
+      }
+    }, 2000);
   }
 
   /**
@@ -303,6 +346,7 @@ export class VectorIndexer {
     const files = this.app.vault.getMarkdownFiles();
     let staleCount = 0;
     let hashChecks = 0;
+    let mtimeUpdates = 0;
 
     for (const file of files) {
       const storedMtime = this.index.fileMtimes[file.path];
@@ -333,6 +377,7 @@ export class VectorIndexer {
       } else {
         // Content unchanged despite mtime change - update mtime to avoid future checks
         this.index.fileMtimes[file.path] = currentMtime;
+        mtimeUpdates++;
       }
     }
 
@@ -351,7 +396,17 @@ export class VectorIndexer {
     if (staleCount > 0) {
       console.log(`F9 MCP: Found ${staleCount} stale files, queueing for reindex`);
       // Process with a small delay to let Obsidian finish loading
-      setTimeout(() => this.processPendingFiles(), 1000);
+      setTimeout(() => {
+        this.processPendingFiles().catch((err) => {
+          console.error("F9 MCP: Error processing pending files:", err);
+        });
+      }, 1000);
+    } else if (mtimeUpdates > 0) {
+      // Save index to persist mtime updates even when no files need re-embedding
+      console.log(`F9 MCP: Saving ${mtimeUpdates} mtime updates (no content changes)`);
+      this.saveIndex().catch((err) => {
+        console.error("F9 MCP: Error saving index after mtime updates:", err);
+      });
     }
 
     return staleCount;
@@ -523,6 +578,7 @@ export class VectorIndexer {
   /**
    * Process a single file after its debounce period has elapsed.
    * Uses isIndexing flag to serialize processing and prevent race conditions.
+   * Skips indexing if the file content hasn't actually changed (hash comparison).
    *
    * @param path - Vault-relative path of the file
    */
@@ -535,11 +591,11 @@ export class VectorIndexer {
       return;
     }
 
-    // If already indexing, re-schedule for later to prevent concurrent processing
+    // If already indexing, re-schedule for a short retry (not full debounce)
     if (this.isIndexing) {
       const timer = setTimeout(
         () => this.processFileAfterDebounce(path),
-        this.settings.debounceMs
+        100 // Short retry delay, not full debounceMs
       );
       this.fileDebounceTimers.set(path, timer);
       return;
@@ -554,9 +610,22 @@ export class VectorIndexer {
       return;
     }
 
-    console.log(`F9 MCP: Indexing ${path} after quiescence period`);
-
     try {
+      // Check if content has actually changed using hash comparison
+      const storedHash = this.index.fileHashes[path];
+      if (storedHash) {
+        const content = await this.app.vault.read(file);
+        const currentHash = computeContentHash(content);
+        if (storedHash === currentHash) {
+          // Content unchanged - just update mtime and schedule batched save
+          this.index.fileMtimes[path] = file.stat.mtime;
+          this.scheduleSave();
+          this.isIndexing = false;
+          return;
+        }
+      }
+
+      console.log(`F9 MCP: Indexing ${path} after quiescence period`);
       await this.indexFile(file);
       await this.saveIndex();
     } catch (err) {

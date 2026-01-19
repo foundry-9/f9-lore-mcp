@@ -2,6 +2,25 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **Settings UI redesigned** with hierarchical accordion layout
+  - Status section at top showing: MCP listening status, port, active sessions, index file/chunk counts, indexing progress, and embedding provider
+  - TF-IDF vocabulary drift now triggers warning icon (⚠) in status bar with tooltip showing drift details
+  - Collapsible accordion sections for "MCP Server Settings", "Claude Desktop Configuration", and "Vector Search Settings"
+  - All accordions collapsed by default; status section always visible at top
+  - Visual styling with borders, hover effects, and triangle indicators for expand/collapse state
+  - Help text section below accordions explaining MCP connection (SSE transport, mcp-remote bridging), TF-IDF search (vocabulary-based, reindex for new terms), and embedding search (semantic understanding, auto-updates)
+
+- **Vector index operations split into two buttons**
+  - "Refresh" button: Checks for files that have changed since last indexed and queues them for reindexing
+  - "Reindex Vault" button: Force re-embeds all markdown files (styled as warning, with description noting potential time and API costs)
+
+- **Auto-reindex on embedding provider type change**
+  - When switching between Ollama, OpenAI, and TF-IDF, a full vault reindex is automatically triggered
+  - If the new provider is unavailable, shows a notice and skips reindex (user can manually reindex later)
+  - Changing settings within the same provider (e.g., endpoint, model) does not trigger auto-reindex
+
 ### Added
 
 - **Release script** (`release.sh`) for creating GitHub releases

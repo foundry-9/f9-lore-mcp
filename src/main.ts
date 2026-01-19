@@ -38,7 +38,7 @@ const MCP_RESTART_DEBOUNCE_MS = 2000;
 
 export default class F9LoreMCPPlugin extends Plugin {
   settings!: F9LoreMCPSettings;
-  private mcpHost?: LoreMcpHost;
+  mcpHost?: LoreMcpHost;
   vectorIndexer?: VectorIndexer;
   private statusBarItem?: HTMLElement;
   private mcpRestartTimer?: ReturnType<typeof setTimeout>;
@@ -238,14 +238,20 @@ export default class F9LoreMCPPlugin extends Plugin {
     if (!this.statusBarItem) return;
 
     const status = this.vectorIndexer?.getIndexingStatus();
+    const stats = this.vectorIndexer?.getStats();
     const mcpRunning = this.mcpHost?.isRunning() ?? false;
 
-    // Determine icon based on health state
+    // Check for TF-IDF vocabulary drift
+    const hasDrift = stats?.tfidfDrift && stats.tfidfDrift.unknownTermsCount > 0;
+
+    // Determine icon based on health state (drift also triggers warning)
     let icon: string;
     const healthState = status?.healthState ?? "ok";
     if (healthState === "busy") {
       this.spinnerFrame = (this.spinnerFrame + 1) % this.STATUS_ICONS.busy.length;
       icon = this.STATUS_ICONS.busy[this.spinnerFrame];
+    } else if (healthState === "warning" || hasDrift) {
+      icon = this.STATUS_ICONS.warning;
     } else {
       icon = this.STATUS_ICONS[healthState];
     }
@@ -263,11 +269,12 @@ export default class F9LoreMCPPlugin extends Plugin {
     this.statusBarItem.setText(parts.join(" "));
 
     // Update tooltip with detailed information
-    this.updateTooltip(status, mcpRunning);
+    this.updateTooltip(status, stats, mcpRunning);
   }
 
   private updateTooltip(
     status: ExtendedIndexingStatus | undefined,
+    stats: ReturnType<VectorIndexer["getStats"]> | undefined,
     mcpRunning: boolean
   ): void {
     if (!this.statusBarItem) return;
@@ -319,8 +326,14 @@ export default class F9LoreMCPPlugin extends Plugin {
       }
     }
 
+    // TF-IDF vocabulary drift warning
+    if (stats?.tfidfDrift && stats.tfidfDrift.unknownTermsCount > 0) {
+      lines.push("");
+      lines.push(`Vocabulary drift: ${stats.tfidfDrift.unknownTermsCount} new terms (${stats.tfidfDrift.driftPercentage}%)`);
+      lines.push("Consider reindexing vault");
+    }
+
     // Index stats and embedding provider
-    const stats = this.vectorIndexer?.getStats();
     if (stats) {
       lines.push("");
       lines.push(`Index: ${stats.fileCount} files, ${stats.chunkCount} chunks`);
@@ -333,10 +346,13 @@ export default class F9LoreMCPPlugin extends Plugin {
 
 class F9LoreMCPSettingTab extends PluginSettingTab {
   plugin: F9LoreMCPPlugin;
+  /** Track the previous embedding provider to detect type changes */
+  private previousEmbeddingProvider: string;
 
   constructor(app: App, plugin: F9LoreMCPPlugin) {
     super(app, plugin);
     this.plugin = plugin;
+    this.previousEmbeddingProvider = plugin.settings.vectorSearch.embeddingProvider;
   }
 
   display(): void {
@@ -345,6 +361,159 @@ class F9LoreMCPSettingTab extends PluginSettingTab {
 
     containerEl.createEl("h2", { text: "F9 Lore MCP Settings" });
 
+    // Status section at the top
+    this.renderStatusSection(containerEl);
+
+    // MCP Settings accordion
+    this.renderAccordion(containerEl, "MCP Server Settings", false, (content) => {
+      this.renderMcpSettings(content);
+    });
+
+    // Claude Desktop Configuration accordion
+    this.renderAccordion(containerEl, "Claude Desktop Configuration", false, (content) => {
+      this.renderClaudeDesktopConfig(content);
+    });
+
+    // Vector Search Settings accordion
+    this.renderAccordion(containerEl, "Vector Search Settings", false, (content) => {
+      this.renderVectorSearchSettings(content);
+    });
+
+    // Help text section
+    this.renderHelpSection(containerEl);
+  }
+
+  /**
+   * Render the help text section below the accordions.
+   */
+  private renderHelpSection(containerEl: HTMLElement): void {
+    const helpContainer = containerEl.createEl("div", {
+      cls: "f9-help-section",
+    });
+
+    // MCP Connection
+    helpContainer.createEl("h4", { text: "MCP Connection" });
+    helpContainer.createEl("p", {
+      text: "This server uses streamable SSE transport only. If your client requires stdio (as some MCP integrations do), you can bridge the connection using mcp-remote or a similar proxy. The default configuration snippet for Claude Desktop includes mcp-remote already, so it should just work. Once connected, you can instruct Claude to access your vault exclusively through this MCP—giving you a controlled, Obsidian-native channel for AI interaction with your notes.",
+      cls: "f9-help-text",
+    });
+
+    // Search: TF-IDF
+    helpContainer.createEl("h4", { text: "Search: TF-IDF" });
+    helpContainer.createEl("p", {
+      text: "The built-in TF-IDF search is fast and free, but it's only as smart as your own organization. It matches words, not meaning—so if your vault uses consistent terminology and well-structured links, it will serve you well. If your notes are more freeform or you need genuine semantic understanding, consider enabling Ollama or OpenAI embeddings instead.",
+      cls: "f9-help-text",
+    });
+    helpContainer.createEl("p", {
+      text: "Note that TF-IDF learns its vocabulary from your existing notes at index time. If you add significant new terminology over time—new characters, locations, concepts—you'll want to reindex your vault so the search can recognize and weight those terms properly.",
+      cls: "f9-help-text",
+    });
+
+    // Search: Embeddings
+    helpContainer.createEl("h4", { text: "Search: Embeddings (Ollama / OpenAI)" });
+    helpContainer.createEl("p", {
+      text: "Embedding-based search understands language, not just keywords. It can find conceptually related notes even when the wording differs. The trade-off is cost (for OpenAI) or local compute (for Ollama). Use this if your vault is large, loosely organized, or if you frequently search for ideas rather than specific terms.",
+      cls: "f9-help-text",
+    });
+    helpContainer.createEl("p", {
+      text: "When you edit or create notes, the plugin automatically updates their embeddings to keep search results current.",
+      cls: "f9-help-text",
+    });
+  }
+
+  /**
+   * Render an accordion/collapsible section.
+   */
+  private renderAccordion(
+    containerEl: HTMLElement,
+    title: string,
+    defaultOpen: boolean,
+    renderContent: (contentEl: HTMLElement) => void
+  ): void {
+    const details = containerEl.createEl("details", {
+      cls: "f9-settings-accordion",
+    });
+    if (defaultOpen) {
+      details.setAttribute("open", "");
+    }
+
+    const summary = details.createEl("summary", {
+      cls: "f9-settings-accordion-summary",
+    });
+    summary.createEl("span", { text: title });
+
+    const content = details.createEl("div", {
+      cls: "f9-settings-accordion-content",
+    });
+
+    renderContent(content);
+  }
+
+  /**
+   * Render the status section showing current plugin state.
+   */
+  private renderStatusSection(containerEl: HTMLElement): void {
+    const statusContainer = containerEl.createEl("div", {
+      cls: "f9-status-section",
+    });
+
+    const mcpRunning = this.plugin.mcpHost?.isRunning() ?? false;
+    const sessionCount = this.plugin.mcpHost?.getSessionCount() ?? 0;
+    const indexingStatus = this.plugin.vectorIndexer?.getIndexingStatus();
+    const stats = this.plugin.vectorIndexer?.getStats();
+
+    // MCP Status row
+    const mcpRow = statusContainer.createEl("div", { cls: "f9-status-row" });
+    const mcpIcon = mcpRunning ? "\u2713" : "\u2716"; // ✓ or ✖
+    const mcpStatus = mcpRunning
+      ? `Listening on port ${this.plugin.settings.mcpPort}`
+      : this.plugin.settings.mcpEnabled
+        ? "Starting..."
+        : "Disabled";
+    mcpRow.createEl("span", {
+      text: `${mcpIcon} MCP: ${mcpStatus}`,
+      cls: mcpRunning ? "f9-status-ok" : "f9-status-off",
+    });
+    if (mcpRunning) {
+      mcpRow.createEl("span", {
+        text: ` | ${sessionCount} session${sessionCount !== 1 ? "s" : ""}`,
+        cls: "f9-status-detail",
+      });
+    }
+
+    // Index Status row
+    const indexRow = statusContainer.createEl("div", { cls: "f9-status-row" });
+    const fileCount = stats?.fileCount ?? 0;
+    const chunkCount = stats?.chunkCount ?? 0;
+
+    let indexStatusText = `Index: ${fileCount} files, ${chunkCount} chunks`;
+    if (indexingStatus?.progress) {
+      indexStatusText += ` | Indexing ${indexingStatus.progress.current}/${indexingStatus.progress.total}`;
+    } else if (indexingStatus?.pendingCount && indexingStatus.pendingCount > 0) {
+      indexStatusText += ` | ${indexingStatus.pendingCount} pending`;
+    }
+
+    indexRow.createEl("span", {
+      text: indexStatusText,
+      cls: "f9-status-detail",
+    });
+
+    // Embedding provider row
+    const providerRow = statusContainer.createEl("div", { cls: "f9-status-row" });
+    const providerKey = stats?.providerKey ?? "none";
+    providerRow.createEl("span", {
+      text: `Embedding: ${providerKey}`,
+      cls: "f9-status-detail",
+    });
+
+    // Add some spacing after status section
+    containerEl.createEl("div", { cls: "f9-status-spacer" });
+  }
+
+  /**
+   * Render MCP server settings.
+   */
+  private renderMcpSettings(containerEl: HTMLElement): void {
     new Setting(containerEl)
       .setName("Enable MCP server")
       .setDesc("Host an MCP server inside Obsidian on 127.0.0.1")
@@ -354,7 +523,7 @@ class F9LoreMCPSettingTab extends PluginSettingTab {
           .onChange(async (value) => {
             this.plugin.settings.mcpEnabled = value;
             await this.plugin.saveSettings();
-            this.display(); // Refresh to show/hide conditional settings
+            this.display(); // Refresh to update status
           })
       );
 
@@ -466,13 +635,12 @@ class F9LoreMCPSettingTab extends PluginSettingTab {
         cls: "setting-item-description",
       });
     }
+  }
 
-    // Claude Desktop Configuration
-    this.renderClaudeDesktopConfig(containerEl);
-
-    // Vector Search Settings
-    containerEl.createEl("h3", { text: "Vector Search" });
-
+  /**
+   * Render vector search settings.
+   */
+  private renderVectorSearchSettings(containerEl: HTMLElement): void {
     new Setting(containerEl)
       .setName("Enable auto-indexing")
       .setDesc("Automatically embed files when they change")
@@ -509,12 +677,22 @@ class F9LoreMCPSettingTab extends PluginSettingTab {
         dropdown
           .addOption("ollama", "Ollama (local)")
           .addOption("openai", "OpenAI")
-          .addOption("tfidf", "TF-IDF (offline)")
+          .addOption("tfidf", "TF-IDF (no network required)")
           .setValue(this.plugin.settings.vectorSearch.embeddingProvider)
           .onChange(async (value) => {
-            this.plugin.settings.vectorSearch.embeddingProvider = value as "ollama" | "openai" | "tfidf";
+            const newProvider = value as "ollama" | "openai" | "tfidf";
+            const oldProvider = this.previousEmbeddingProvider;
+
+            this.plugin.settings.vectorSearch.embeddingProvider = newProvider;
             this.plugin.vectorIndexer?.updateSettings(this.plugin.settings.vectorSearch);
             await this.plugin.saveSettings();
+
+            // If the provider type changed, trigger a full reindex
+            if (oldProvider !== newProvider) {
+              this.previousEmbeddingProvider = newProvider;
+              await this.triggerProviderChangeReindex(newProvider);
+            }
+
             this.display(); // Refresh to show provider-specific settings
           })
       );
@@ -528,11 +706,15 @@ class F9LoreMCPSettingTab extends PluginSettingTab {
       this.renderTfidfSettings(containerEl);
     }
 
+    // Index operations section
+    containerEl.createEl("h4", { text: "Index Operations" });
+
+    // Refresh Index button
     new Setting(containerEl)
-      .setName("Reindex vault")
-      .setDesc("Force re-embed all markdown files")
+      .setName("Refresh index")
+      .setDesc("Check for files that have changed since last indexed and update them")
       .addButton((btn) =>
-        btn.setButtonText("Reindex Now").onClick(async () => {
+        btn.setButtonText("Refresh").onClick(async () => {
           const indexer = this.plugin.vectorIndexer;
           if (!indexer) {
             new Notice("Vector indexer not initialized");
@@ -541,33 +723,67 @@ class F9LoreMCPSettingTab extends PluginSettingTab {
 
           const available = await indexer.checkProviderConnection();
           if (!available) {
-            const provider = this.plugin.settings.vectorSearch.embeddingProvider;
-            if (provider === "ollama") {
-              new Notice("Cannot connect to Ollama. Is it running?");
-            } else if (provider === "openai") {
-              new Notice("Cannot connect to OpenAI. Check your API key.");
-            }
-            // TF-IDF is always available, so no error message needed
+            this.showProviderUnavailableNotice();
             return;
           }
 
-          new Notice("Starting vault reindex...");
-          const result = await indexer.reindexVault();
+          new Notice("Checking for stale files...");
+          const staleCount = await indexer.checkForStaleFiles();
 
-          if (result.errors.length > 0) {
-            new Notice(
-              `Indexed ${result.indexed} files with ${result.errors.length} errors.`
-            );
+          if (staleCount > 0) {
+            new Notice(`Found ${staleCount} stale file${staleCount !== 1 ? "s" : ""}, queueing for reindex`);
           } else {
-            new Notice(`Successfully indexed ${result.indexed} files`);
+            new Notice("Index is up to date");
           }
+          this.display(); // Refresh to show updated status
         })
       );
+
+    // Reindex Vault button with warning
+    const reindexSetting = new Setting(containerEl)
+      .setName("Reindex entire vault")
+      .setDesc(
+        "Force re-embed all markdown files. " +
+        "This can be slow for large vaults and may incur API costs if using OpenAI."
+      )
+      .addButton((btn) =>
+        btn
+          .setButtonText("Reindex Vault")
+          .setWarning()
+          .onClick(async () => {
+            const indexer = this.plugin.vectorIndexer;
+            if (!indexer) {
+              new Notice("Vector indexer not initialized");
+              return;
+            }
+
+            const available = await indexer.checkProviderConnection();
+            if (!available) {
+              this.showProviderUnavailableNotice();
+              return;
+            }
+
+            new Notice("Starting full vault reindex...");
+            const result = await indexer.reindexVault();
+
+            if (result.errors.length > 0) {
+              new Notice(
+                `Indexed ${result.indexed} files with ${result.errors.length} errors.`
+              );
+            } else {
+              new Notice(`Successfully indexed ${result.indexed} files`);
+            }
+            this.display(); // Refresh to show updated stats
+          })
+      );
+
+    // Add warning styling
+    reindexSetting.settingEl.addClass("f9-reindex-warning");
 
     // Show index stats
     const stats = this.plugin.vectorIndexer?.getStats();
     if (stats) {
-      let statusDesc = `${stats.fileCount} files, ${stats.chunkCount} chunks indexed using ${stats.providerKey}`;
+      let statusDesc = `${stats.fileCount} files, ${stats.chunkCount} chunks indexed`;
 
       // Add TF-IDF vocabulary drift info if available
       if (stats.tfidfDrift && stats.tfidfDrift.vocabularySize > 0) {
@@ -592,6 +808,46 @@ class F9LoreMCPSettingTab extends PluginSettingTab {
           );
         driftSetting.settingEl.addClass("mod-warning");
       }
+    }
+  }
+
+  /**
+   * Show a notice when the embedding provider is unavailable.
+   */
+  private showProviderUnavailableNotice(): void {
+    const provider = this.plugin.settings.vectorSearch.embeddingProvider;
+    if (provider === "ollama") {
+      new Notice("Cannot connect to Ollama. Is it running?");
+    } else if (provider === "openai") {
+      new Notice("Cannot connect to OpenAI. Check your API key.");
+    }
+    // TF-IDF is always available, so no error message needed
+  }
+
+  /**
+   * Trigger a full reindex when the embedding provider type changes.
+   */
+  private async triggerProviderChangeReindex(newProvider: string): Promise<void> {
+    const indexer = this.plugin.vectorIndexer;
+    if (!indexer) return;
+
+    const available = await indexer.checkProviderConnection();
+    if (!available) {
+      new Notice(
+        `Switched to ${newProvider}. Provider not available - reindex when ready.`
+      );
+      return;
+    }
+
+    new Notice(`Switched to ${newProvider}. Starting full reindex...`);
+    const result = await indexer.reindexVault();
+
+    if (result.errors.length > 0) {
+      new Notice(
+        `Reindexed ${result.indexed} files with ${result.errors.length} errors.`
+      );
+    } else {
+      new Notice(`Successfully reindexed ${result.indexed} files with ${newProvider}`);
     }
   }
 
@@ -775,8 +1031,6 @@ class F9LoreMCPSettingTab extends PluginSettingTab {
    * Render the Claude Desktop configuration section.
    */
   private renderClaudeDesktopConfig(containerEl: HTMLElement): void {
-    containerEl.createEl("h3", { text: "Claude Desktop Configuration" });
-
     const protocol = this.plugin.settings.mcpHttpsEnabled ? "https" : "http";
     const port = this.plugin.settings.mcpPort;
 

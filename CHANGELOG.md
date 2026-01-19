@@ -4,6 +4,13 @@
 
 ### Added
 
+- **Release script** (`release.sh`) for creating GitHub releases
+  - Validates no uncommitted changes exist
+  - Checks if tag already exists to prevent duplicates
+  - Builds project, creates git tag, pushes tag, and creates GitHub release
+  - Includes main.js, manifest.json, and styles.css as release assets
+  - Release workflow documented in CLAUDE.md
+
 - **MIT License** for open-source distribution
 - **versions.json** for Obsidian plugin registry compatibility
 

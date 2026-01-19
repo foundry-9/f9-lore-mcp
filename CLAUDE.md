@@ -20,6 +20,22 @@ npm run version  # Sync manifest.json version with package.json
 
 No test framework is configured yet.
 
+## Releasing
+
+1. Update the version in `package.json`
+2. Run `npm run version` to sync `manifest.json`
+3. Move CHANGELOG.md `[Unreleased]` items under a new version heading
+4. Commit the version bump changes
+5. Run `./release.sh` to build, tag, and create the GitHub release
+
+The release script will:
+
+- Verify no uncommitted changes exist
+- Check the tag doesn't already exist
+- Build the project with `npm run build`
+- Create and push an annotated git tag
+- Create a GitHub release with main.js, manifest.json, and styles.css
+
 ## Development Setup
 
 1. Install dependencies: `npm i`

@@ -6,6 +6,5 @@
   "description": "Host an MCP server to expose vault operations via HTTP/SSE endpoints and provide vector search.",
   "author": "Charles Sebold",
   "authorUrl": "https://foundry-9.com",
-  "isDesktopOnly": true,
-  "main": "main.js"
+  "isDesktopOnly": true
 }

@@ -219,9 +219,18 @@ npm run version
 - `src/mcp/host.ts` — MCP server host (multi-session architecture)
 - `src/mcp/structure.ts` — Note structure extraction
 - `src/mcp/editors.ts` — Granular content editing
+- `src/mcp/utils.ts` — Shared utilities (path normalization, error handling)
+- `src/mcp/tools/` — Modular MCP tool definitions
+  - `basic-ops.ts` — Note CRUD operations (create, read, update, delete, move)
+  - `folder-ops.ts` — Folder operations (list, create, delete)
+  - `structure-read.ts` — Structure reading tools (get_note_structure, read_section, etc.)
+  - `structure-write.ts` — Structure editing tools (update_section, rename_heading, etc.)
+  - `vector-search.ts` — Vector search tools (search, reindex_vault, refresh_index)
+  - `text-search.ts` — Text search tools (grep, str_replace)
+  - `index.ts` — Tool registration orchestrator
 - `src/vector/` — Vector search subsystem
 - `styles.css` — Optional UI styles
 
 ## License
 
-UNLICENSED
+MIT

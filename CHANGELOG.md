@@ -20,6 +20,11 @@
 
 ### Changed
 
+- **README.md updated** to reflect modular tool structure from refactor
+  - Files section now documents `src/mcp/tools/` directory structure
+  - Added `src/mcp/utils.ts` to file listing
+  - Updated license from "UNLICENSED" to "MIT"
+
 - **Internal refactoring** for improved code maintainability
   - Extracted path normalization utilities for consistent path handling
   - Consolidated error response helpers across MCP tools

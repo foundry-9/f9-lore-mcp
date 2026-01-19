@@ -70,20 +70,6 @@ export class OllamaClient implements EmbeddingProvider {
   }
 
   /**
-   * Update the model used for embeddings.
-   */
-  setModel(model: string): void {
-    this.model = model;
-  }
-
-  /**
-   * Update the base URL.
-   */
-  setBaseUrl(baseUrl: string): void {
-    this.baseUrl = baseUrl;
-  }
-
-  /**
    * Get a unique key identifying this provider configuration.
    */
   getProviderKey(): string {

@@ -132,25 +132,4 @@ export class OpenAIClient implements EmbeddingProvider {
       this.baseUrl !== "https://api.openai.com/v1" ? `:${this.baseUrl}` : "";
     return `openai:${this.model}${urlPart}`;
   }
-
-  /**
-   * Update the model used for embeddings.
-   */
-  setModel(model: string): void {
-    this.model = model;
-  }
-
-  /**
-   * Update the API key.
-   */
-  setApiKey(apiKey: string): void {
-    this.apiKey = apiKey;
-  }
-
-  /**
-   * Update the base URL.
-   */
-  setBaseUrl(baseUrl: string): void {
-    this.baseUrl = baseUrl || "https://api.openai.com/v1";
-  }
 }

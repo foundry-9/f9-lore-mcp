@@ -13,6 +13,15 @@
 
 ### Changed
 
+- **Internal refactoring** for improved code maintainability
+  - Extracted path normalization utilities for consistent path handling
+  - Consolidated error response helpers across MCP tools
+  - Extracted MCP tools into separate modules by category (basic-ops, folder-ops, structure-read, structure-write, vector-search, text-search)
+  - Created shared utility module (`src/mcp/utils.ts`) with DRY helpers
+  - Host.ts reduced from ~2200 lines to ~370 lines
+  - Removed unused code from TF-IDF vectorizer (340 lines to 75 lines)
+  - Removed unused setter methods from embedding providers
+
 - **Rich status bar indicator** with animated spinner and detailed tooltips
   - Animated spinner icon during indexing operations (spinning circle phases)
   - Checkmark (✓) when idle and healthy

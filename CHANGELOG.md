@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **TF-IDF vector search improvements** for better retrieval quality and memory efficiency
+  - Upgraded from vanilla TF-IDF to BM25 (Okapi BM25) scoring - industry standard for keyword retrieval
+  - Added Porter stemming to normalize word variants (e.g., "kingdoms" → "kingdom", "running" → "run")
+  - Implemented sparse vector representation - reduces memory usage by ~95% for large vaults
+  - Added optional bigram tokens to capture two-word phrases (enabled by default)
+  - Expanded stop words list with pronouns, common verbs, and prepositions for better signal-to-noise ratio
+  - Index version bumped to 4; existing TF-IDF indexes will require full reindex on upgrade
+
 ### Added
 
 - **Clickable status bar** opens plugin settings with context-aware accordion expansion

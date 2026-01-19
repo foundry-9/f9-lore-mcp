@@ -6,7 +6,18 @@ import type { EmbeddingProviderType } from "./provider";
 import type { TfidfState } from "./tfidf";
 
 /** Schema version for future migrations */
-export const EMBEDDING_INDEX_VERSION = 3;
+export const EMBEDDING_INDEX_VERSION = 4;
+
+/**
+ * Sparse vector representation for memory-efficient TF-IDF storage.
+ * Indices must be sorted in ascending order for efficient similarity computation.
+ */
+export interface SparseVector {
+  /** Sorted array of non-zero indices */
+  indices: number[];
+  /** Values corresponding to each index */
+  values: number[];
+}
 
 /** A single chunk embedding with metadata */
 export interface ChunkEmbedding {
@@ -20,8 +31,10 @@ export interface ChunkEmbedding {
   preview: string;
   /** Full chunk text */
   content: string;
-  /** The embedding vector (768 dimensions for nomic-embed-text) */
+  /** The embedding vector (dense, for Ollama/OpenAI providers) */
   embedding: number[];
+  /** Sparse embedding (for TF-IDF provider - more memory efficient) */
+  sparseEmbedding?: SparseVector;
   /** File mtime when chunk was embedded (for staleness detection) */
   embeddedAt: number;
 }

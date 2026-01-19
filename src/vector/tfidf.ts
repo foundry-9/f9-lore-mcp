@@ -23,6 +23,7 @@
 
 import type { EmbeddingProvider } from "./provider";
 import { TfidfVectorizer } from "./tfidf-vectorizer";
+import type { SparseVector } from "./types";
 
 /** Serializable TF-IDF state for persistence */
 export interface TfidfState {
@@ -30,6 +31,8 @@ export interface TfidfState {
   vocabulary: [string, number][];
   /** IDF weights for each term in vocabulary order */
   idf: number[];
+  /** Average document length for BM25 scoring */
+  avgDocLength: number;
   /** Unknown terms encountered since last reindex */
   unknownTerms?: string[];
 }
@@ -57,6 +60,7 @@ export class TfidfClient implements EmbeddingProvider {
   loadState(state: TfidfState): void {
     this.vectorizer.vocabulary = new Map(state.vocabulary);
     this.vectorizer.idf = state.idf;
+    this.vectorizer.avgDocLength = state.avgDocLength ?? 0;
     this.vocabularySize = state.vocabulary.length;
     this.unknownTerms = new Set(state.unknownTerms ?? []);
     this.isFitted = true;
@@ -75,6 +79,7 @@ export class TfidfClient implements EmbeddingProvider {
     return {
       vocabulary: Array.from(this.vectorizer.vocabulary.entries()),
       idf: this.vectorizer.idf,
+      avgDocLength: this.vectorizer.avgDocLength,
       unknownTerms: Array.from(this.unknownTerms),
     };
   }
@@ -122,7 +127,8 @@ export class TfidfClient implements EmbeddingProvider {
   }
 
   /**
-   * Transform a single text to a dense TF-IDF vector.
+   * Transform a single text to a dense BM25-weighted vector.
+   * Uses Okapi BM25 scoring instead of vanilla TF-IDF for better retrieval quality.
    * Tracks unknown terms for vocabulary drift detection.
    *
    * @param text - Text to transform
@@ -144,17 +150,88 @@ export class TfidfClient implements EmbeddingProvider {
       }
     }
 
-    // Build dense vector
+    // Build dense vector with BM25 scoring
     const vector = new Array(this.vocabularySize).fill(0);
     const docLength = tokens.length || 1; // Avoid division by zero
+    const avgDocLength = this.vectorizer.avgDocLength || 1;
+    const k1 = this.vectorizer.k1;
+    const b = this.vectorizer.b;
 
     for (const [indexStr, count] of Object.entries(tf)) {
       const index = parseInt(indexStr);
-      // TF-IDF = (term frequency / doc length) * IDF
-      vector[index] = (count / docLength) * this.vectorizer.idf[index];
+      const idf = this.vectorizer.idf[index];
+      // BM25 term frequency normalization
+      // tfNorm = (tf * (k1 + 1)) / (tf + k1 * (1 - b + b * (docLength / avgDocLength)))
+      const tfNorm = (count * (k1 + 1)) /
+        (count + k1 * (1 - b + b * (docLength / avgDocLength)));
+      vector[index] = idf * tfNorm;
     }
 
     return vector;
+  }
+
+  /**
+   * Transform a single text to a sparse BM25-weighted vector.
+   * Uses Okapi BM25 scoring, returns only non-zero entries for memory efficiency.
+   * Indices are sorted in ascending order for efficient similarity computation.
+   *
+   * @param text - Text to transform
+   * @param trackUnknown - Whether to track unknown terms (default: true)
+   * @returns Sparse vector with sorted indices
+   */
+  private transformToSparse(text: string, trackUnknown: boolean = true): SparseVector {
+    const tokens = this.vectorizer.tokenize(text);
+    const tf: Map<number, number> = new Map();
+
+    // Calculate term frequencies for known vocabulary terms
+    for (const token of tokens) {
+      if (this.vectorizer.vocabulary.has(token)) {
+        const index = this.vectorizer.vocabulary.get(token)!;
+        tf.set(index, (tf.get(index) || 0) + 1);
+      } else if (trackUnknown) {
+        // Track unknown terms for vocabulary drift detection
+        this.unknownTerms.add(token);
+      }
+    }
+
+    // Build sparse vector with BM25 scoring
+    const docLength = tokens.length || 1;
+    const avgDocLength = this.vectorizer.avgDocLength || 1;
+    const k1 = this.vectorizer.k1;
+    const b = this.vectorizer.b;
+
+    // Collect entries and sort by index for efficient similarity
+    const entries: Array<{ index: number; value: number }> = [];
+    for (const [index, count] of tf.entries()) {
+      const idf = this.vectorizer.idf[index];
+      const tfNorm = (count * (k1 + 1)) /
+        (count + k1 * (1 - b + b * (docLength / avgDocLength)));
+      entries.push({ index, value: idf * tfNorm });
+    }
+
+    // Sort by index for efficient merge-join in similarity computation
+    entries.sort((a, b) => a.index - b.index);
+
+    return {
+      indices: entries.map(e => e.index),
+      values: entries.map(e => e.value),
+    };
+  }
+
+  /**
+   * Generate sparse embeddings for texts using the fitted vocabulary.
+   * More memory-efficient than dense embeddings for TF-IDF.
+   *
+   * @param texts - Array of text strings to embed
+   * @returns Array of sparse vectors (one per input text)
+   */
+  embedSparse(texts: string[]): SparseVector[] {
+    if (!this.isFitted) {
+      // Not fitted yet - return empty sparse vectors
+      return texts.map(() => ({ indices: [], values: [] }));
+    }
+
+    return texts.map((text) => this.transformToSparse(text));
   }
 
   /**

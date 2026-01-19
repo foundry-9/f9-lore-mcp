@@ -17,7 +17,7 @@ import { chunkMarkdown } from "./chunker";
 import type { EmbeddingProvider } from "./provider";
 import { createEmbeddingProvider } from "./provider";
 import { TfidfClient } from "./tfidf";
-import { topK } from "./similarity";
+import { topK, sparseTopK } from "./similarity";
 import { createHash } from "crypto";
 import * as os from "os";
 import * as path from "path";
@@ -413,24 +413,40 @@ export class VectorIndexer {
     const filePrefix = `[${file.path}]\n\n`;
     const chunksWithPath = chunks.map(chunk => filePrefix + chunk);
 
-    // Generate embeddings for chunks with file path context
-    const embeddings = await this.provider.embed(chunksWithPath);
-
     // Remove old chunks for this file
     this.index.chunks = this.index.chunks.filter(c => c.filePath !== file.path);
 
-    // Add new chunks
-    for (let i = 0; i < chunks.length; i++) {
-      const chunk: ChunkEmbedding = {
-        id: `${file.path}::${i}`,
-        filePath: file.path,
-        chunkIndex: i,
-        preview: chunksWithPath[i].slice(0, 200),
-        content: chunksWithPath[i],
-        embedding: embeddings[i],
-        embeddedAt: file.stat.mtime,
-      };
-      this.index.chunks.push(chunk);
+    // For TF-IDF, use sparse embeddings for memory efficiency
+    if (this.provider instanceof TfidfClient) {
+      const sparseEmbeddings = this.provider.embedSparse(chunksWithPath);
+      for (let i = 0; i < chunks.length; i++) {
+        const chunk: ChunkEmbedding = {
+          id: `${file.path}::${i}`,
+          filePath: file.path,
+          chunkIndex: i,
+          preview: chunksWithPath[i].slice(0, 200),
+          content: chunksWithPath[i],
+          embedding: [], // Empty dense embedding for TF-IDF (uses sparseEmbedding instead)
+          sparseEmbedding: sparseEmbeddings[i],
+          embeddedAt: file.stat.mtime,
+        };
+        this.index.chunks.push(chunk);
+      }
+    } else {
+      // Generate dense embeddings for Ollama/OpenAI
+      const embeddings = await this.provider.embed(chunksWithPath);
+      for (let i = 0; i < chunks.length; i++) {
+        const chunk: ChunkEmbedding = {
+          id: `${file.path}::${i}`,
+          filePath: file.path,
+          chunkIndex: i,
+          preview: chunksWithPath[i].slice(0, 200),
+          content: chunksWithPath[i],
+          embedding: embeddings[i],
+          embeddedAt: file.stat.mtime,
+        };
+        this.index.chunks.push(chunk);
+      }
     }
 
     this.index.fileMtimes[file.path] = file.stat.mtime;
@@ -520,6 +536,7 @@ export class VectorIndexer {
    *
    * All providers (Ollama, OpenAI, TF-IDF) use pre-computed embeddings.
    * For TF-IDF, the vocabulary must be fitted via reindexVault() first.
+   * TF-IDF uses sparse vectors for memory-efficient similarity computation.
    *
    * @param query - Natural language query
    * @param k - Number of results to return (default 10)
@@ -531,6 +548,13 @@ export class VectorIndexer {
       return [];
     }
 
+    // For TF-IDF, use sparse similarity
+    if (this.provider instanceof TfidfClient) {
+      const [querySparseEmbedding] = this.provider.embedSparse([query]);
+      return sparseTopK(querySparseEmbedding, this.index.chunks, k);
+    }
+
+    // For Ollama/OpenAI, use dense similarity
     const [queryEmbedding] = await this.provider.embed([query]);
     return topK(queryEmbedding, this.index.chunks, k);
   }

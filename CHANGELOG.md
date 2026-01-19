@@ -4,6 +4,12 @@
 
 ### Changed
 
+- **Improved `create_note` and `update_note` tool descriptions** to counsel LLM consumers to prefer granular structure tools when possible
+  - `create_note` now notes that `insert_content`, `update_section`, and `update_heading_content` are more token-efficient for adding content to existing notes
+  - `update_note` now recommends partial edit tools (`update_section`, `update_heading_content`, `update_list_item`, `update_frontmatter`, `insert_content`) to reduce token usage and risk of unintended changes
+
+### Changed
+
 - **TF-IDF vector search improvements** for better retrieval quality and memory efficiency
   - Upgraded from vanilla TF-IDF to BM25 (Okapi BM25) scoring - industry standard for keyword retrieval
   - Added Porter stemming to normalize word variants (e.g., "kingdoms" → "kingdom", "running" → "run")

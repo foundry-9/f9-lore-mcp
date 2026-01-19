@@ -76,9 +76,9 @@ The release script will:
     - `ping` - Simple ping/pong health check
     - `list_folders` - List folders in the vault
     - `list_notes` - List notes in the vault
-    - `create_note` - Create a note
+    - `create_note` - Create a note (recommends structure tools for adding to existing notes)
     - `read_note` - Read note contents
-    - `update_note` - Update note contents (full file replacement)
+    - `update_note` - Replace entire note contents (recommends structure tools for partial edits)
     - `delete_note` - Delete a note (moves to trash)
     - `move_or_rename_note` - Move or rename a note
     - `create_folder` - Create a folder

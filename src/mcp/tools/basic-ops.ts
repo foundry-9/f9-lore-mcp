@@ -26,7 +26,7 @@ export function registerBasicOpsTools(mcp: McpServer, app: App): void {
   mcp.registerTool(
     "create_note",
     {
-      description: "Create a note in the current vault",
+      description: "Create a new note in the current vault. For adding content to an existing note, prefer granular structure tools (insert_content, update_section, update_heading_content) which are more token-efficient.",
       inputSchema: z.object({
         path: z
           .string()
@@ -138,7 +138,7 @@ export function registerBasicOpsTools(mcp: McpServer, app: App): void {
   mcp.registerTool(
     "update_note",
     {
-      description: "Update the contents of an existing note in the current vault",
+      description: "Replace the entire contents of an existing note. For partial edits, prefer granular structure tools (update_section, update_heading_content, update_list_item, update_frontmatter, insert_content) which are more token-efficient and reduce risk of unintended changes.",
       inputSchema: z.object({
         path: z
           .string()

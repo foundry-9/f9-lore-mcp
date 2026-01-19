@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+### Added
+
+- **MIT License** for open-source distribution
+- **versions.json** for Obsidian plugin registry compatibility
+
+### Removed
+
+- **Console logging** removed from production code for cleaner output
+
 ### Changed
 
 - **Rich status bar indicator** with animated spinner and detailed tooltips

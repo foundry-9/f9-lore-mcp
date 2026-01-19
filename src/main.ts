@@ -54,7 +54,6 @@ export default class F9LoreMCPPlugin extends Plugin {
   private spinnerFrame = 0;
 
   async onload() {
-    console.log("Loading plugin: F9 Lore MCP");
     await this.loadSettings();
 
     // Initialize vector indexer
@@ -135,7 +134,6 @@ export default class F9LoreMCPPlugin extends Plugin {
   }
 
   onunload() {
-    console.log("Unloading plugin: F9 Lore MCP");
     if (this.mcpRestartTimer) {
       clearTimeout(this.mcpRestartTimer);
       this.mcpRestartTimer = undefined;
@@ -163,7 +161,6 @@ export default class F9LoreMCPPlugin extends Plugin {
       this.settings = { ...DEFAULT_SETTINGS, ...oldSettings };
       // Save in new format immediately to complete migration
       await this.saveSettings();
-      console.log(`[F9 MCP] Migrated settings to vault-keyed format for: ${vaultKey}`);
     } else {
       this.settings = { ...DEFAULT_SETTINGS };
     }
@@ -197,8 +194,8 @@ export default class F9LoreMCPPlugin extends Plugin {
     }
     this.mcpRestartTimer = setTimeout(() => {
       this.mcpRestartTimer = undefined;
-      this.ensureMcpRunning().catch((err) => {
-        console.error("[F9 MCP] Error during scheduled restart:", err);
+      this.ensureMcpRunning().catch(() => {
+        // Error during scheduled restart
       });
     }, MCP_RESTART_DEBOUNCE_MS);
   }
@@ -228,13 +225,8 @@ export default class F9LoreMCPPlugin extends Plugin {
     if (cfg.enabled) {
       try {
         await this.mcpHost.restart(cfg);
-        const protocol = cfg.https ? "https" : "http";
-        console.log(
-          `F9 Lore MCP server listening on ${protocol}://127.0.0.1:${cfg.port}/mcp`
-        );
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
-        console.error(`F9 Lore MCP: Failed to start server: ${message}`);
         new Notice(`MCP Server Error: ${message}`);
       }
     } else {
@@ -560,17 +552,12 @@ class F9LoreMCPSettingTab extends PluginSettingTab {
           }
 
           new Notice("Starting vault reindex...");
-          const result = await indexer.reindexVault((file, current, total) => {
-            if (current % 10 === 0 || current === total) {
-              console.log(`F9 MCP: Indexing ${current}/${total}: ${file}`);
-            }
-          });
+          const result = await indexer.reindexVault();
 
           if (result.errors.length > 0) {
             new Notice(
-              `Indexed ${result.indexed} files with ${result.errors.length} errors. Check console for details.`
+              `Indexed ${result.indexed} files with ${result.errors.length} errors.`
             );
-            console.error("F9 MCP: Indexing errors:", result.errors);
           } else {
             new Notice(`Successfully indexed ${result.indexed} files`);
           }

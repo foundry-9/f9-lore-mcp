@@ -1947,13 +1947,8 @@ export class LoreMcpHost {
       }
     }
 
-    if (sessionsToClose.length > 0) {
-      const truncatedKey = clientKey.length > 60 ? clientKey.substring(0, 60) + "..." : clientKey;
-      console.log(`[F9 MCP] Cleaning up ${sessionsToClose.length} stale session(s) for client: ${truncatedKey}`);
-
-      for (const sessionId of sessionsToClose) {
-        await this.closeSession(sessionId);
-      }
+    for (const sessionId of sessionsToClose) {
+      await this.closeSession(sessionId);
     }
   }
 
@@ -1971,11 +1966,8 @@ export class LoreMcpHost {
       }
     }
 
-    if (expiredSessions.length > 0) {
-      console.log(`[F9 MCP] Cleaning up ${expiredSessions.length} expired session(s) (timeout: ${this.config.sessionTimeoutMinutes ?? DEFAULT_SESSION_TIMEOUT_MINUTES} min)`);
-      for (const sessionId of expiredSessions) {
-        await this.closeSession(sessionId);
-      }
+    for (const sessionId of expiredSessions) {
+      await this.closeSession(sessionId);
     }
   }
 
@@ -2002,9 +1994,7 @@ export class LoreMcpHost {
       enableDnsRebindingProtection: this.config.enableDnsRebindingProtection ?? false,
     });
 
-    console.log(`[F9 MCP] Connecting MCP server to transport...`);
     await mcp.connect(transport);
-    console.log(`[F9 MCP] Connected`);
 
     const now = Date.now();
     const session: McpSession = {
@@ -2016,7 +2006,6 @@ export class LoreMcpHost {
     };
 
     this.sessions.set(sessionId, session);
-    console.log(`[F9 MCP] Created new session: ${sessionId} (total: ${this.sessions.size})`);
 
     return { sessionId, session };
   }
@@ -2029,7 +2018,6 @@ export class LoreMcpHost {
     if (session) {
       await session.mcp.close();
       this.sessions.delete(sessionId);
-      console.log(`[F9 MCP] Closed session: ${sessionId} (remaining: ${this.sessions.size})`);
     }
   }
 
@@ -2057,46 +2045,34 @@ export class LoreMcpHost {
           // Extract session ID from request headers
           const sessionId = req.headers["mcp-session-id"] as string | undefined;
 
-          console.log(`[F9 MCP] ${req.method} /mcp - sessionId: ${sessionId || "(none)"}, existing sessions: ${this.sessions.size}`);
-
           if (sessionId && this.sessions.has(sessionId)) {
             // Route to existing session
-            console.log(`[F9 MCP] Routing to existing session: ${sessionId}`);
             const session = this.sessions.get(sessionId)!;
             session.lastActivity = Date.now(); // Update activity timestamp
             try {
               await session.transport.handleRequest(req, res);
-              console.log(`[F9 MCP] Request handled successfully for session: ${sessionId}`);
             } catch (transportErr) {
-              console.error(`[F9 MCP] Transport error for session ${sessionId}:`, transportErr);
               throw transportErr;
             }
           } else if (req.method === "POST") {
             // Create new session for POST without valid session ID
-            console.log(`[F9 MCP] Creating new session for POST request`);
-            const { sessionId: newSessionId, session } = await this.createSession(req);
-            console.log(`[F9 MCP] Handling request with new session: ${newSessionId}`);
+            const { session } = await this.createSession(req);
             try {
               await session.transport.handleRequest(req, res);
-              console.log(`[F9 MCP] Initial request handled for session: ${newSessionId}`);
             } catch (transportErr) {
-              console.error(`[F9 MCP] Transport error for new session ${newSessionId}:`, transportErr);
               throw transportErr;
             }
           } else if (req.method === "DELETE" && sessionId) {
             // Handle session termination
-            console.log(`[F9 MCP] DELETE request for session: ${sessionId}`);
             await this.closeSession(sessionId);
             res.writeHead(200, { "content-type": "application/json" });
             res.end(JSON.stringify({ ok: true }));
           } else if (req.method === "GET") {
             // GET requests need a valid session for SSE streams
-            console.log(`[F9 MCP] GET request without valid session - rejecting`);
             res.writeHead(400, { "content-type": "application/json" });
             res.end(JSON.stringify({ error: "GET requires valid mcp-session-id header" }));
           } else {
             // Invalid request - no session and not a POST
-            console.log(`[F9 MCP] Invalid request: method=${req.method}, sessionId=${sessionId}`);
             res.writeHead(400, { "content-type": "application/json" });
             res.end(JSON.stringify({ error: "Invalid session or method" }));
           }
@@ -2156,7 +2132,6 @@ export class LoreMcpHost {
         }
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
-        console.error(`[F9 MCP] Error handling request: ${message}`);
         res.writeHead(500, { "content-type": "application/json" });
         res.end(JSON.stringify({ error: message }));
       }
@@ -2185,13 +2160,11 @@ export class LoreMcpHost {
 
     // Start periodic session cleanup
     this.cleanupInterval = setInterval(() => {
-      this.cleanupExpiredSessions().catch((err) => {
-        console.error("[F9 MCP] Error during session cleanup:", err);
+      this.cleanupExpiredSessions().catch(() => {
+        // Error during session cleanup
       });
     }, SESSION_CLEANUP_INTERVAL_MS);
 
-    const timeoutMinutes = this.config.sessionTimeoutMinutes ?? DEFAULT_SESSION_TIMEOUT_MINUTES;
-    console.log(`[F9 MCP] Server started on ${protocol}://127.0.0.1:${port}/mcp (session timeout: ${timeoutMinutes} min)`);
   }
 
   async stop(): Promise<void> {
@@ -2204,12 +2177,8 @@ export class LoreMcpHost {
     // Close all active sessions
     const closePromises: Promise<void>[] = [];
 
-    for (const [sessionId, session] of this.sessions) {
-      closePromises.push(
-        session.mcp.close().then(() => {
-          console.log(`[F9 MCP] Closed session: ${sessionId}`);
-        })
-      );
+    for (const [, session] of this.sessions) {
+      closePromises.push(session.mcp.close());
     }
     this.sessions.clear();
 
@@ -2222,7 +2191,6 @@ export class LoreMcpHost {
     }
 
     await Promise.allSettled(closePromises);
-    console.log("[F9 MCP] Server stopped");
   }
 
   async restart(config?: Partial<McpConfig>): Promise<void> {

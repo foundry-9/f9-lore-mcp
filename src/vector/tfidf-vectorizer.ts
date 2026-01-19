@@ -138,9 +138,7 @@ class TfidfVectorizer {
             'than', 'more', 'most', 'less', 'least', 'some', 'many', 'much',
             'few', 'fewer', 'least', 'each', 'every', 'either', 'neither',
             'both', 'other', 'another', 'such', 'same', 'own', 'other' ]);
-        this.log = (message: string) => {
-            console.log(message);
-        };
+        this.log = () => {};
     }
 
     /**
@@ -294,7 +292,6 @@ class TfidfVectorizer {
      * @returns A Promise resolving to an array of matching documents and their scores.
      */
     Search(query: string, topN = 3): Promise<{ document: string; score: number; }[]> {
-        console.log(`Searching for: ${ query }`);
         return new Promise(resolve => {
             resolve(this.SearchSync(query, topN));
         });
@@ -307,7 +304,6 @@ class TfidfVectorizer {
      * @returns An array of matching documents and their similarity scores.
      */
     SearchSync(query: string, topN = 3): { document: string; score: number; }[] {
-        console.log(`Searching for: ${ query }`);
         const queryVec: Record<number, number> = {};
         const tokens = this.tokenize(query);
 

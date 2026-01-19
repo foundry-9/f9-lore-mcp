@@ -7,7 +7,7 @@
     "plugin",
     "mcp"
   ],
-  "license": "UNLICENSED",
+  "license": "MIT",
   "author": "Charles Sebold <charles@sebold.tech>",
   "type": "commonjs",
   "main": "main.js",

@@ -141,8 +141,6 @@ export class VectorIndexer {
     const vaultPath = this.getVaultPath();
     const cacheFilePath = getCacheFilePath(vaultPath);
 
-    console.log(`F9 MCP: Loading index for provider ${currentProviderKey}`);
-    console.log(`F9 MCP: Cache file path: ${cacheFilePath}`);
 
     // Try loading from cache file first
     try {
@@ -150,18 +148,11 @@ export class VectorIndexer {
       const stored = JSON.parse(cacheContent) as EmbeddingIndex;
 
       if (stored && stored.version !== EMBEDDING_INDEX_VERSION) {
-        console.log(
-          `F9 MCP: Index version mismatch (stored: ${stored.version}, expected: ${EMBEDDING_INDEX_VERSION}), reindex required`
-        );
+        // Index version mismatch, reindex required
       } else if (stored && stored.version === EMBEDDING_INDEX_VERSION) {
         if (stored.providerKey !== currentProviderKey) {
-          console.log(
-            `F9 MCP: Embedding provider changed from ${stored.providerKey} to ${currentProviderKey}, index invalidated`
-          );
           this.index = createEmptyIndex(currentProviderKey);
         } else {
-          const fileCount = Object.keys(stored.fileMtimes).length;
-          console.log(`F9 MCP: Loaded embedding index from cache (${stored.chunks.length} chunks, ${fileCount} files)`);
           this.index = stored;
           // Load TF-IDF state if present and using TF-IDF provider
           this.loadTfidfState();
@@ -173,8 +164,6 @@ export class VectorIndexer {
       }
     } catch (err) {
       // Cache file doesn't exist or is invalid, check for legacy data
-      const message = err instanceof Error ? err.message : String(err);
-      console.log(`F9 MCP: No cache file found or invalid (${message}), checking legacy data`);
     }
 
     // Try loading from legacy data.json for migration
@@ -183,14 +172,8 @@ export class VectorIndexer {
 
     if (legacyStored && legacyStored.version === EMBEDDING_INDEX_VERSION) {
       if (legacyStored.providerKey !== currentProviderKey) {
-        console.log(
-          `F9 MCP: Embedding provider changed from ${legacyStored.providerKey} to ${currentProviderKey}, index invalidated`
-        );
         this.index = createEmptyIndex(currentProviderKey);
       } else {
-        console.log(
-          `F9 MCP: Migrating embedding index from data.json to cache (${legacyStored.chunks.length} chunks)`
-        );
         this.index = legacyStored;
         // Load TF-IDF state if present and using TF-IDF provider
         this.loadTfidfState();
@@ -201,7 +184,6 @@ export class VectorIndexer {
         // Remove from data.json
         delete data[EMBEDDING_INDEX_KEY];
         await this.plugin.saveData(data);
-        console.log("F9 MCP: Migration complete, removed embeddingIndex from data.json");
       }
       return;
     }
@@ -237,10 +219,9 @@ export class VectorIndexer {
 
       if (cleaned) {
         await this.plugin.saveData(data);
-        console.log("F9 MCP: Cleaned up legacy embeddingIndex from data.json");
       }
     } catch (err) {
-      console.error("F9 MCP: Failed to clean up legacy data:", err);
+      // Failed to clean up legacy data
     }
   }
 
@@ -250,7 +231,6 @@ export class VectorIndexer {
   private loadTfidfState(): void {
     if (this.provider instanceof TfidfClient && this.index.tfidfState) {
       this.provider.loadState(this.index.tfidfState);
-      console.log(`F9 MCP: Loaded TF-IDF vocabulary (${this.index.tfidfState.vocabulary.length} terms)`);
     }
   }
 
@@ -286,8 +266,6 @@ export class VectorIndexer {
     await fs.mkdir(cacheDir, { recursive: true });
 
     // Write index to cache file
-    const fileCount = Object.keys(this.index.fileMtimes).length;
-    console.log(`F9 MCP: Saving index to ${cacheFilePath} (${this.index.chunks.length} chunks, ${fileCount} files)`);
     await fs.writeFile(cacheFilePath, JSON.stringify(this.index), "utf-8");
 
     // Clear pending save flag since we just saved
@@ -315,8 +293,8 @@ export class VectorIndexer {
     this.saveDebounceTimer = setTimeout(() => {
       this.saveDebounceTimer = undefined;
       if (this.hasPendingSave) {
-        this.saveIndex().catch((err) => {
-          console.error("F9 MCP: Error in scheduled save:", err);
+        this.saveIndex().catch(() => {
+          // Error in scheduled save
         });
       }
     }, 2000);
@@ -334,9 +312,6 @@ export class VectorIndexer {
     const newProviderKey = this.provider.getProviderKey();
 
     if (oldProviderKey !== newProviderKey) {
-      console.log(
-        `F9 MCP: Embedding provider changed from ${oldProviderKey} to ${newProviderKey}, index invalidated`
-      );
       this.index = createEmptyIndex(newProviderKey);
     }
   }
@@ -398,23 +373,17 @@ export class VectorIndexer {
       }
     }
 
-    if (hashChecks > 0) {
-      console.log(`F9 MCP: Checked ${hashChecks} files with changed mtime, ${staleCount} had content changes`);
-    }
-
     if (staleCount > 0) {
-      console.log(`F9 MCP: Found ${staleCount} stale files, queueing for reindex`);
       // Process with a small delay to let Obsidian finish loading
       setTimeout(() => {
-        this.processPendingFiles().catch((err) => {
-          console.error("F9 MCP: Error processing pending files:", err);
+        this.processPendingFiles().catch(() => {
+          // Error processing pending files
         });
       }, 1000);
     } else if (mtimeUpdates > 0) {
       // Save index to persist mtime updates even when no files need re-embedding
-      console.log(`F9 MCP: Saving ${mtimeUpdates} mtime updates (no content changes)`);
-      this.saveIndex().catch((err) => {
-        console.error("F9 MCP: Error saving index after mtime updates:", err);
+      this.saveIndex().catch(() => {
+        // Error saving index after mtime updates
       });
     }
 
@@ -497,7 +466,6 @@ export class VectorIndexer {
     try {
       // For TF-IDF, we need to fit on the entire corpus first
       if (this.provider instanceof TfidfClient) {
-        console.log("F9 MCP: Collecting corpus for TF-IDF fitting...");
         const allChunks: string[] = [];
 
         // First pass: collect all chunks for vocabulary building
@@ -514,9 +482,7 @@ export class VectorIndexer {
           }
         }
 
-        console.log(`F9 MCP: Fitting TF-IDF on ${allChunks.length} chunks...`);
         this.provider.fitCorpus(allChunks);
-        console.log("F9 MCP: TF-IDF vocabulary built, now embedding files...");
       }
 
       // Second pass (or only pass for non-TF-IDF): index each file
@@ -531,7 +497,6 @@ export class VectorIndexer {
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
           errors.push(`${file.path}: ${message}`);
-          console.error(`F9 MCP: Failed to index ${file.path}:`, err);
           this.lastError = {
             timestamp: Date.now(),
             filePath: file.path,
@@ -645,12 +610,10 @@ export class VectorIndexer {
         }
       }
 
-      console.log(`F9 MCP: Indexing ${path} after quiescence period`);
       await this.indexFile(file);
       await this.saveIndex();
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      console.error(`F9 MCP: Failed to index ${path}:`, err);
       this.lastError = {
         timestamp: Date.now(),
         filePath: path,
@@ -681,7 +644,6 @@ export class VectorIndexer {
     }
     this.fileDebounceTimers.clear();
 
-    console.log(`F9 MCP: Processing ${paths.length} pending files`);
 
     try {
       for (let i = 0; i < paths.length; i++) {
@@ -695,7 +657,6 @@ export class VectorIndexer {
             await this.indexFile(file);
           } catch (err) {
             const message = err instanceof Error ? err.message : String(err);
-            console.error(`F9 MCP: Failed to index ${path}:`, err);
             this.lastError = {
               timestamp: Date.now(),
               filePath: path,

@@ -55,7 +55,7 @@ interface McpSession {
 const SESSION_CLEANUP_INTERVAL_MS = 5 * 60 * 1000; // Check for expired sessions every 5 minutes
 const DEFAULT_SESSION_TIMEOUT_MINUTES = 30;
 
-export class ObsidianMcpHost {
+export class LoreMcpHost {
   private app: App;
   private config: McpConfig;
   private httpServer?: Server;
@@ -170,7 +170,7 @@ export class ObsidianMcpHost {
   private registerTools(mcp: McpServer): void {
     // Register simple ping tool
     mcp.registerTool("ping", {}, async () => ({
-      content: [{ type: "text", text: "pong from Obsidian" }],
+      content: [{ type: "text", text: "pong from Lore" }],
     }));
 
     // Register list folders tool
@@ -1988,7 +1988,7 @@ export class ObsidianMcpHost {
     // Clean up any existing sessions from this client
     await this.cleanupClientSessions(clientKey);
     const mcp = new McpServer(
-      { name: "F9 Obsidian MCP", version: "1.0.0" },
+      { name: "F9 Lore MCP", version: "1.0.0" },
       { capabilities: { tools: { listChanged: true } } }
     );
 

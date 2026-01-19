@@ -34,17 +34,17 @@ function getCacheBaseDir(): string {
   const home = os.homedir();
 
   if (platform === "darwin") {
-    return path.join(home, "Library", "Caches", "f9-obsidian-mcp");
+    return path.join(home, "Library", "Caches", "f9-lore-mcp");
   } else if (platform === "win32") {
     return path.join(
       process.env.LOCALAPPDATA || path.join(home, "AppData", "Local"),
-      "f9-obsidian-mcp"
+      "f9-lore-mcp"
     );
   } else {
     // Linux and others - use XDG_CACHE_HOME or fallback to ~/.cache
     return path.join(
       process.env.XDG_CACHE_HOME || path.join(home, ".cache"),
-      "f9-obsidian-mcp"
+      "f9-lore-mcp"
     );
   }
 }

@@ -1,9 +1,9 @@
 import { App, Notice, Plugin, PluginSettingTab, Setting, TFile } from "obsidian";
-import { ObsidianMcpHost, McpConfig } from "./mcp/host";
+import { LoreMcpHost, McpConfig } from "./mcp/host";
 import { VectorIndexer } from "./vector/indexer";
 import { VectorSearchSettings, DEFAULT_VECTOR_SETTINGS } from "./vector/types";
 
-interface F9ObsidianMCPSettings {
+interface F9LoreMCPSettings {
   mcpEnabled: boolean;
   mcpPort: number;
   mcpDnsRebindingProtection: boolean;
@@ -19,10 +19,10 @@ interface F9ObsidianMCPSettings {
  * Settings are keyed by vault name to support multiple vaults sharing the same plugin folder.
  */
 interface PluginData {
-  vaults: Record<string, F9ObsidianMCPSettings>;
+  vaults: Record<string, F9LoreMCPSettings>;
 }
 
-const DEFAULT_SETTINGS: F9ObsidianMCPSettings = {
+const DEFAULT_SETTINGS: F9LoreMCPSettings = {
   mcpEnabled: false,
   mcpPort: 3030,
   mcpDnsRebindingProtection: true,
@@ -35,15 +35,15 @@ const DEFAULT_SETTINGS: F9ObsidianMCPSettings = {
 
 const MCP_RESTART_DEBOUNCE_MS = 2000;
 
-export default class F9ObsidianMCPPlugin extends Plugin {
-  settings!: F9ObsidianMCPSettings;
-  private mcpHost?: ObsidianMcpHost;
+export default class F9LoreMCPPlugin extends Plugin {
+  settings!: F9LoreMCPSettings;
+  private mcpHost?: LoreMcpHost;
   vectorIndexer?: VectorIndexer;
   private statusBarItem?: HTMLElement;
   private mcpRestartTimer?: ReturnType<typeof setTimeout>;
 
   async onload() {
-    console.log("Loading plugin: F9 Obsidian MCP");
+    console.log("Loading plugin: F9 Lore MCP");
     await this.loadSettings();
 
     // Initialize vector indexer
@@ -96,12 +96,12 @@ export default class F9ObsidianMCPPlugin extends Plugin {
 
     const ribbon = this.addRibbonIcon(
       "dice",
-      "F9 Obsidian MCP",
+      "F9 Lore MCP",
       () => {
-        new Notice("F9 Obsidian MCP: Hello from your plugin!");
+        new Notice("F9 Lore MCP: Hello from your plugin!");
       }
     );
-    ribbon.addClass("f9-obsidian-mcp-ribbon-icon");
+    ribbon.addClass("f9-lore-mcp-ribbon-icon");
 
     this.statusBarItem = this.addStatusBarItem();
     this.updateStatusBar();
@@ -112,19 +112,19 @@ export default class F9ObsidianMCPPlugin extends Plugin {
     );
 
     this.addCommand({
-      id: "f9-obsidian-mcp-say-hello",
+      id: "f9-lore-mcp-say-hello",
       name: "Say Hello",
       callback: () => new Notice("F9 MCP says hello 👋"),
     });
 
-    this.addSettingTab(new F9ObsidianMCPSettingTab(this.app, this));
+    this.addSettingTab(new F9LoreMCPSettingTab(this.app, this));
 
     // Start MCP server if enabled
     await this.ensureMcpRunning();
   }
 
   onunload() {
-    console.log("Unloading plugin: F9 Obsidian MCP");
+    console.log("Unloading plugin: F9 Lore MCP");
     if (this.mcpRestartTimer) {
       clearTimeout(this.mcpRestartTimer);
       this.mcpRestartTimer = undefined;
@@ -148,7 +148,7 @@ export default class F9ObsidianMCPPlugin extends Plugin {
       this.settings = { ...DEFAULT_SETTINGS, ...pluginData.vaults[vaultKey] };
     } else if (rawData && typeof rawData === "object") {
       // Migrate from old format: existing settings become this vault's settings
-      const oldSettings = rawData as Partial<F9ObsidianMCPSettings>;
+      const oldSettings = rawData as Partial<F9LoreMCPSettings>;
       this.settings = { ...DEFAULT_SETTINGS, ...oldSettings };
       // Save in new format immediately to complete migration
       await this.saveSettings();
@@ -211,7 +211,7 @@ export default class F9ObsidianMCPPlugin extends Plugin {
       sessionTimeoutMinutes: this.settings.mcpSessionTimeoutMinutes,
     };
 
-    this.mcpHost ??= new ObsidianMcpHost(this.app, cfg, this.vectorIndexer);
+    this.mcpHost ??= new LoreMcpHost(this.app, cfg, this.vectorIndexer);
 
     // Restart with latest config
     if (cfg.enabled) {
@@ -219,11 +219,11 @@ export default class F9ObsidianMCPPlugin extends Plugin {
         await this.mcpHost.restart(cfg);
         const protocol = cfg.https ? "https" : "http";
         console.log(
-          `F9 Obsidian MCP server listening on ${protocol}://127.0.0.1:${cfg.port}/mcp`
+          `F9 Lore MCP server listening on ${protocol}://127.0.0.1:${cfg.port}/mcp`
         );
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
-        console.error(`F9 Obsidian MCP: Failed to start server: ${message}`);
+        console.error(`F9 Lore MCP: Failed to start server: ${message}`);
         new Notice(`MCP Server Error: ${message}`);
       }
     } else {
@@ -260,10 +260,10 @@ export default class F9ObsidianMCPPlugin extends Plugin {
   }
 }
 
-class F9ObsidianMCPSettingTab extends PluginSettingTab {
-  plugin: F9ObsidianMCPPlugin;
+class F9LoreMCPSettingTab extends PluginSettingTab {
+  plugin: F9LoreMCPPlugin;
 
-  constructor(app: App, plugin: F9ObsidianMCPPlugin) {
+  constructor(app: App, plugin: F9LoreMCPPlugin) {
     super(app, plugin);
     this.plugin = plugin;
   }
@@ -272,7 +272,7 @@ class F9ObsidianMCPSettingTab extends PluginSettingTab {
     const { containerEl } = this;
     containerEl.empty();
 
-    containerEl.createEl("h2", { text: "F9 Obsidian MCP Settings" });
+    containerEl.createEl("h2", { text: "F9 Lore MCP Settings" });
 
     new Setting(containerEl)
       .setName("Enable MCP server")
@@ -700,7 +700,7 @@ class F9ObsidianMCPSettingTab extends PluginSettingTab {
 
     // Format as a single entry that can be added to mcpServers
     const wrapper: Record<string, ConfigEntry> = {};
-    wrapper[`f9-obsidian-${vaultSlug}`] = config;
+    wrapper[`f9-lore-${vaultSlug}`] = config;
 
     return JSON.stringify(wrapper, null, 2);
   }

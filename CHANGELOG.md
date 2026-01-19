@@ -4,6 +4,20 @@
 
 ### Changed
 
+- **Plugin renamed** from "F9 Obsidian MCP" to "F9 Lore MCP"
+  - ID changed from `f9-obsidian-mcp` to `f9-lore-mcp` (complies with plugin guidelines: no "obsidian" in ID/name)
+  - Cache directory changed from `f9-obsidian-mcp` to `f9-lore-mcp`
+  - Class names updated: `F9LoreMCPPlugin`, `F9LoreMCPSettings`, `LoreMcpHost`
+  - All internal references updated
+
+- **README.md rewritten** to document current plugin features
+  - Complete list of all MCP tools (note ops, folder ops, granular editing, vector search, text search)
+  - Installation instructions (from source and for development)
+  - Configuration guide (basic settings, HTTPS, vector search providers)
+  - Claude Desktop integration instructions with mcp-remote
+  - Multi-session support documentation
+  - Updated file structure overview
+
 - **Hybrid mtime+hash staleness detection for vector indexing**
   - Staleness detection now uses content hashes (SHA-256) in addition to mtime
   - Fast path: If mtime unchanged, file is assumed unchanged (no I/O needed)
@@ -13,9 +27,9 @@
 
 - **Embedding index moved to system cache directory**
   - Embeddings are now stored in a platform-appropriate cache directory instead of `data.json`
-  - macOS: `~/Library/Caches/f9-obsidian-mcp/<vault-hash>/embeddings.json`
-  - Windows: `%LOCALAPPDATA%/f9-obsidian-mcp/<vault-hash>/embeddings.json`
-  - Linux: `~/.cache/f9-obsidian-mcp/<vault-hash>/embeddings.json`
+  - macOS: `~/Library/Caches/f9-lore-mcp/<vault-hash>/embeddings.json`
+  - Windows: `%LOCALAPPDATA%/f9-lore-mcp/<vault-hash>/embeddings.json`
+  - Linux: `~/.cache/f9-lore-mcp/<vault-hash>/embeddings.json`
   - Prevents embeddings from being synced across devices (which caused index corruption)
   - Vault-specific hash allows symlinked plugin directories to work correctly with multiple vaults
   - Automatic migration from legacy `data.json` storage on first load
@@ -168,7 +182,7 @@
 
 - **Claude Desktop configuration snippet** in settings
   - Shows copyable JSON config for `claude_desktop_config.json`
-  - Automatically uses vault name as slug (e.g., `f9-obsidian-my-vault`)
+  - Automatically uses vault name as slug (e.g., `f9-lore-my-vault`)
   - Includes correct protocol (http/https) and port from settings
   - Adds `NODE_TLS_REJECT_UNAUTHORIZED=0` env var when HTTPS is enabled
   - Copy button for easy clipboard access

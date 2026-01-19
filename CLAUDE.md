@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-F9 Obsidian MCP is an Obsidian plugin that hosts a Model Context Protocol (MCP) server inside Obsidian, exposing vault operations via HTTP/SSE endpoints.
+F9 Lore MCP is an Obsidian plugin that hosts a Model Context Protocol (MCP) server inside Obsidian, exposing vault operations via HTTP/SSE endpoints.
 
 ## Workflow
 
@@ -24,20 +24,20 @@ No test framework is configured yet.
 
 1. Install dependencies: `npm i`
 2. Run `npm run dev` for watch mode
-3. Symlink or copy this folder to `<vault>/.obsidian/plugins/f9-obsidian-mcp/`
+3. Symlink or copy this folder to `<vault>/.obsidian/plugins/f9-lore-mcp/`
 4. Enable the plugin in Obsidian Settings → Community Plugins
 
 ## Architecture
 
 ### Plugin Entry Point (`src/main.ts`)
 
-- `F9ObsidianMCPPlugin` extends Obsidian's `Plugin` class
+- `F9LoreMCPPlugin` extends Obsidian's `Plugin` class
 - Manages settings (port, MCP enabled toggle, DNS rebinding protection)
-- Creates `ObsidianMcpHost` instance and calls `ensureMcpRunning()` on load and settings change
+- Creates `LoreMcpHost` instance and calls `ensureMcpRunning()` on load and settings change
 
 ### MCP Host (`src/mcp/host.ts`)
 
-- `ObsidianMcpHost` wraps `@modelcontextprotocol/sdk` server
+- `LoreMcpHost` wraps `@modelcontextprotocol/sdk` server
 - **Multi-session architecture**: supports multiple concurrent MCP clients
   - Each client connection gets its own `McpServer` + `StreamableHTTPServerTransport` pair
   - Sessions managed via `Map<sessionId, McpSession>`

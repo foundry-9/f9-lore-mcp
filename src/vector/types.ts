@@ -1,5 +1,5 @@
 /**
- * Vector search types for F9 Obsidian MCP
+ * Vector search types for F9 Lore MCP
  */
 
 import type { EmbeddingProviderType } from "./provider";

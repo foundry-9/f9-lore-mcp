@@ -27,7 +27,6 @@ interface McpSession {
   createdAt: number;
   clientKey: string;
   lastActivity: number;
-  toolCount: number;
 }
 
 const SESSION_CLEANUP_INTERVAL_MS = 5 * 60 * 1000; // Check for expired sessions every 5 minutes
@@ -76,9 +75,8 @@ export class LoreMcpHost {
 
   /**
    * Register all MCP tools on a server instance.
-   * Returns the number of tools registered.
    */
-  private registerTools(mcp: McpServer): number {
+  private registerTools(mcp: McpServer): void {
     const ctx: ToolRegistrationContext = {
       app: this.app,
       waitForCacheUpdate: this.waitForCacheUpdate.bind(this),
@@ -86,15 +84,6 @@ export class LoreMcpHost {
     };
 
     registerAllTools(mcp, ctx);
-
-    // Count tools by accessing the internal registry
-    // Note: This is a workaround since McpServer doesn't expose a tool count method
-    try {
-      const registeredTools = (mcp as unknown as { _registeredTools?: Record<string, unknown> })._registeredTools;
-      return registeredTools ? Object.keys(registeredTools).length : 0;
-    } catch {
-      return 0;
-    }
   }
 
   /**
@@ -169,7 +158,7 @@ export class LoreMcpHost {
       { capabilities: { tools: { listChanged: true } } }
     );
 
-    const toolCount = this.registerTools(mcp);
+    this.registerTools(mcp);
 
     const sessionId = randomUUID();
     const transport = new StreamableHTTPServerTransport({
@@ -188,7 +177,6 @@ export class LoreMcpHost {
       createdAt: now,
       clientKey,
       lastActivity: now,
-      toolCount,
     };
 
     this.sessions.set(sessionId, session);
@@ -280,35 +268,6 @@ export class LoreMcpHost {
             vault: this.app.vault.getName(),
             sessions: sessionList,
           }, null, 2));
-        } else if (url === "/debug") {
-          // Debug endpoint to inspect server state
-          const sessionInfo: Record<string, unknown>[] = [];
-          for (const [sid, sess] of this.sessions) {
-            sessionInfo.push({
-              sessionId: sid,
-              createdAt: sess.createdAt,
-              toolCount: sess.toolCount,
-            });
-          }
-          res.writeHead(200, { "content-type": "application/json" });
-          res.end(JSON.stringify({ sessions: sessionInfo }, null, 2));
-        } else if (url === "/debug/tools") {
-          // Debug: Get actual tools list from first session
-          const firstSession = this.sessions.values().next().value;
-          if (firstSession) {
-            const registeredTools = (firstSession.mcp as unknown as { _registeredTools: Record<string, { description?: string; enabled: boolean }> })._registeredTools || {};
-            const tools = Object.entries(registeredTools)
-              .filter(([, tool]) => tool.enabled)
-              .map(([name, tool]) => ({
-                name,
-                description: tool.description,
-              }));
-            res.writeHead(200, { "content-type": "application/json" });
-            res.end(JSON.stringify({ tools }, null, 2));
-          } else {
-            res.writeHead(404, { "content-type": "application/json" });
-            res.end(JSON.stringify({ error: "No sessions" }));
-          }
         } else {
           res.writeHead(404).end();
         }

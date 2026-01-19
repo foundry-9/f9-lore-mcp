@@ -1,6 +1,6 @@
 /**
  * Structure write tools: update_section, delete_section, update_heading_content,
- * rename_heading, update_list_item, update_frontmatter, insert_content
+ * rename_heading, update_list_item, remove_list_item_task, update_frontmatter, insert_content
  */
 
 import type { App, TFile, CachedMetadata } from "obsidian";
@@ -22,6 +22,7 @@ import {
   renameHeading,
   updateListItemText,
   updateListItemTask,
+  removeListItemTask,
   updateFrontmatter,
   insertContent,
   type InsertPosition,
@@ -299,6 +300,35 @@ export function registerStructureWriteTools(mcp: McpServer, ctx: StructureWriteC
       }
 
       return editResultToToolResponse(editResult);
+    }
+  );
+
+  // Register remove list item task tool
+  mcp.registerTool(
+    "remove_list_item_task",
+    {
+      description: "Remove task status from a list item, converting it back to a regular list item",
+      inputSchema: z.object({
+        path: z.string().describe("Vault-relative path").min(1),
+        list_item_id: z.string().describe("List item ID from get_note_structure").min(1),
+        freshnessToken: z.string().describe("Token from last read").min(1),
+        verify: z.boolean().optional().default(true),
+      }),
+    },
+    async (args) => {
+      const { path, list_item_id, freshnessToken, verify } = args;
+      const lookup = getFileOrError(app, path, true);
+      if ("error" in lookup) return lookup.error;
+
+      const result = await performEdit(
+        ctx,
+        lookup.file,
+        freshnessToken,
+        (c, cache) => removeListItemTask(c, cache, list_item_id),
+        verify
+      );
+
+      return editResultToToolResponse(result);
     }
   );
 

@@ -1,4 +1,4 @@
-import type { CachedMetadata, ListItemCache } from "obsidian";
+import type { CachedMetadata, HeadingCache, ListItemCache, SectionCache } from "obsidian";
 import {
   generateSectionId,
   generateHeadingId,
@@ -22,6 +22,34 @@ export function replaceAtOffsets(
 }
 
 // ============================================================================
+// Lookup Helpers (DRY)
+// ============================================================================
+
+/**
+ * Find a section by its generated ID.
+ */
+function findSectionById(cache: CachedMetadata, sectionId: string): SectionCache | undefined {
+  return (cache.sections || []).find((s) => generateSectionId(s) === sectionId);
+}
+
+/**
+ * Find a heading by its generated ID. Returns index and heading, or undefined.
+ */
+function findHeadingById(cache: CachedMetadata, headingId: string): { index: number; heading: HeadingCache } | undefined {
+  const headings = cache.headings || [];
+  const index = headings.findIndex((h) => generateHeadingId(h) === headingId);
+  if (index === -1) return undefined;
+  return { index, heading: headings[index] };
+}
+
+/**
+ * Find a list item by its generated ID.
+ */
+function findListItemById(cache: CachedMetadata, listItemId: string): ListItemCache | undefined {
+  return (cache.listItems || []).find((i) => generateListItemId(i) === listItemId);
+}
+
+// ============================================================================
 // Section Editing
 // ============================================================================
 
@@ -35,12 +63,8 @@ export function updateSectionContent(
   sectionId: string,
   newContent: string
 ): string | null {
-  const sections = cache.sections || [];
-  const section = sections.find((s) => generateSectionId(s) === sectionId);
-
-  if (!section) {
-    return null;
-  }
+  const section = findSectionById(cache, sectionId);
+  if (!section) return null;
 
   return replaceAtOffsets(
     content,
@@ -59,12 +83,8 @@ export function deleteSection(
   cache: CachedMetadata,
   sectionId: string
 ): string | null {
-  const sections = cache.sections || [];
-  const section = sections.find((s) => generateSectionId(s) === sectionId);
-
-  if (!section) {
-    return null;
-  }
+  const section = findSectionById(cache, sectionId);
+  if (!section) return null;
 
   // Delete the section and any trailing newline
   let endOffset = section.position.end.offset;
@@ -85,12 +105,8 @@ export function insertAfterSection(
   sectionId: string,
   newContent: string
 ): string | null {
-  const sections = cache.sections || [];
-  const section = sections.find((s) => generateSectionId(s) === sectionId);
-
-  if (!section) {
-    return null;
-  }
+  const section = findSectionById(cache, sectionId);
+  if (!section) return null;
 
   const insertPoint = section.position.end.offset;
   // Ensure there's a newline before the new content
@@ -110,12 +126,8 @@ export function insertBeforeSection(
   sectionId: string,
   newContent: string
 ): string | null {
-  const sections = cache.sections || [];
-  const section = sections.find((s) => generateSectionId(s) === sectionId);
-
-  if (!section) {
-    return null;
-  }
+  const section = findSectionById(cache, sectionId);
+  if (!section) return null;
 
   const insertPoint = section.position.start.offset;
   const suffix = newContent.endsWith("\n") ? "" : "\n";
@@ -139,14 +151,11 @@ export function updateHeadingContent(
   newContent: string,
   preserveSubheadings: boolean
 ): string | null {
+  const found = findHeadingById(cache, headingId);
+  if (!found) return null;
+
   const headings = cache.headings || [];
-  const headingIndex = headings.findIndex((h) => generateHeadingId(h) === headingId);
-
-  if (headingIndex === -1) {
-    return null;
-  }
-
-  const heading = headings[headingIndex];
+  const { index: headingIndex, heading } = found;
   const headingLevel = heading.level;
 
   // Start after the heading line
@@ -188,21 +197,17 @@ export function renameHeading(
   newText: string,
   newLevel?: number
 ): string | null {
-  const headings = cache.headings || [];
-  const heading = headings.find((h) => generateHeadingId(h) === headingId);
+  const found = findHeadingById(cache, headingId);
+  if (!found) return null;
 
-  if (!heading) {
-    return null;
-  }
-
-  const level = newLevel ?? heading.level;
+  const level = newLevel ?? found.heading.level;
   const hashes = "#".repeat(level);
   const newHeadingLine = `${hashes} ${newText}`;
 
   return replaceAtOffsets(
     content,
-    heading.position.start.offset,
-    heading.position.end.offset,
+    found.heading.position.start.offset,
+    found.heading.position.end.offset,
     newHeadingLine
   );
 }
@@ -218,14 +223,11 @@ export function insertUnderHeading(
   newContent: string,
   atStart: boolean
 ): string | null {
+  const found = findHeadingById(cache, headingId);
+  if (!found) return null;
+
   const headings = cache.headings || [];
-  const headingIndex = headings.findIndex((h) => generateHeadingId(h) === headingId);
-
-  if (headingIndex === -1) {
-    return null;
-  }
-
-  const heading = headings[headingIndex];
+  const { index: headingIndex, heading } = found;
   const headingLevel = heading.level;
 
   if (atStart) {
@@ -285,6 +287,30 @@ function parseListItemLine(line: string): {
 }
 
 /**
+ * Helper to find a list item and parse its line content.
+ * Returns null if item not found or line cannot be parsed.
+ */
+function withParsedListItem(
+  content: string,
+  cache: CachedMetadata,
+  listItemId: string,
+  builder: (parsed: { indent: string; marker: string; taskBox?: string; text: string }) => string
+): string | null {
+  const item = findListItemById(cache, listItemId);
+  if (!item) return null;
+
+  const lineStart = item.position.start.offset;
+  const lineEnd = item.position.end.offset;
+  const currentLine = content.slice(lineStart, lineEnd);
+
+  const parsed = parseListItemLine(currentLine);
+  if (!parsed) return null;
+
+  const newLine = builder(parsed);
+  return replaceAtOffsets(content, lineStart, lineEnd, newLine);
+}
+
+/**
  * Updates a list item's text (preserving marker and task status).
  * Returns null if list item not found.
  */
@@ -294,25 +320,9 @@ export function updateListItemText(
   listItemId: string,
   newText: string
 ): string | null {
-  const listItems = cache.listItems || [];
-  const item = listItems.find((i) => generateListItemId(i) === listItemId);
-
-  if (!item) {
-    return null;
-  }
-
-  const lineStart = item.position.start.offset;
-  const lineEnd = item.position.end.offset;
-  const currentLine = content.slice(lineStart, lineEnd);
-
-  const parsed = parseListItemLine(currentLine);
-  if (!parsed) {
-    return null;
-  }
-
-  const newLine = `${parsed.indent}${parsed.marker} ${parsed.taskBox || ""}${newText}`;
-
-  return replaceAtOffsets(content, lineStart, lineEnd, newLine);
+  return withParsedListItem(content, cache, listItemId, (parsed) =>
+    `${parsed.indent}${parsed.marker} ${parsed.taskBox || ""}${newText}`
+  );
 }
 
 /**
@@ -326,27 +336,9 @@ export function updateListItemTask(
   listItemId: string,
   taskStatus: string
 ): string | null {
-  const listItems = cache.listItems || [];
-  const item = listItems.find((i) => generateListItemId(i) === listItemId);
-
-  if (!item) {
-    return null;
-  }
-
-  const lineStart = item.position.start.offset;
-  const lineEnd = item.position.end.offset;
-  const currentLine = content.slice(lineStart, lineEnd);
-
-  const parsed = parseListItemLine(currentLine);
-  if (!parsed) {
-    return null;
-  }
-
-  // Build new task box
-  const newTaskBox = `[${taskStatus}] `;
-  const newLine = `${parsed.indent}${parsed.marker} ${newTaskBox}${parsed.text}`;
-
-  return replaceAtOffsets(content, lineStart, lineEnd, newLine);
+  return withParsedListItem(content, cache, listItemId, (parsed) =>
+    `${parsed.indent}${parsed.marker} [${taskStatus}] ${parsed.text}`
+  );
 }
 
 /**
@@ -358,26 +350,9 @@ export function removeListItemTask(
   cache: CachedMetadata,
   listItemId: string
 ): string | null {
-  const listItems = cache.listItems || [];
-  const item = listItems.find((i) => generateListItemId(i) === listItemId);
-
-  if (!item) {
-    return null;
-  }
-
-  const lineStart = item.position.start.offset;
-  const lineEnd = item.position.end.offset;
-  const currentLine = content.slice(lineStart, lineEnd);
-
-  const parsed = parseListItemLine(currentLine);
-  if (!parsed) {
-    return null;
-  }
-
-  // Build line without task box
-  const newLine = `${parsed.indent}${parsed.marker} ${parsed.text}`;
-
-  return replaceAtOffsets(content, lineStart, lineEnd, newLine);
+  return withParsedListItem(content, cache, listItemId, (parsed) =>
+    `${parsed.indent}${parsed.marker} ${parsed.text}`
+  );
 }
 
 // ============================================================================

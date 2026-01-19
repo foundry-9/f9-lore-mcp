@@ -93,6 +93,7 @@ The release script will:
     - `update_heading_content` - Update content under heading
     - `rename_heading` - Rename heading text/level
     - `update_list_item` - Update list item text/task status
+    - `remove_list_item_task` - Remove task status from a list item
     - `update_frontmatter` - Update frontmatter properties
     - `insert_content` - Insert at specific position
   - **Vector Search**
@@ -111,7 +112,7 @@ The release script will:
   - ID generation for sections (`s-type-line`), headings (`h-level-line`), list items (`li-line`)
 - `editors.ts` - Pure functions for content manipulation
   - String-based editing using position offsets from metadata cache
-  - Functions: `updateSectionContent`, `deleteSection`, `updateHeadingContent`, `renameHeading`, `updateListItemText`, `updateListItemTask`, `updateFrontmatter`, `insertContent`
+  - Functions: `updateSectionContent`, `deleteSection`, `updateHeadingContent`, `renameHeading`, `updateListItemText`, `updateListItemTask`, `removeListItemTask`, `updateFrontmatter`, `insertContent`
 
 ### Vector Search (`src/vector/`)
 

@@ -9,15 +9,19 @@
   - If an MCP error occurred, the MCP Server Settings accordion auto-expands
   - If a vector search error or TF-IDF vocabulary drift is detected, the Vector Search Settings accordion auto-expands
   - MCP errors are now tracked and displayed in the status section with error styling
+- **`remove_list_item_task` tool** - New MCP tool to remove task status from a list item, converting it back to a regular list item
 
 ### Changed
 
-- **Internal refactoring** for improved code maintainability (DRY, SRP)
+- **Internal refactoring** for improved code maintainability (DRY, SRP, YAGNI)
   - Created `errorResult()` factory function with typed `ErrorCode` to consolidate error response handling
   - Added `getFileOrError()` helper to eliminate 20+ instances of duplicate path normalization and file lookup
   - Added `truncateString()` utility function replacing scattered truncation logic
   - Unified session cleanup in `LoreMcpHost` with predicate-based `cleanupSessionsWhere()` method
   - Added `parseClientKey()` helper to encapsulate client identity parsing
+  - Added `findSectionById()`, `findHeadingById()`, `findListItemById()` lookup helpers in editors.ts
+  - Added `withParsedListItem()` helper to DRY list item editing functions
+  - Removed unused `toolCount` field from McpSession and related code
 
 - **Settings UI redesigned** with hierarchical accordion layout
   - Status section at top showing: MCP listening status, port, active sessions, index file/chunk counts, indexing progress, and embedding provider
@@ -35,6 +39,10 @@
   - When switching between Ollama, OpenAI, and TF-IDF, a full vault reindex is automatically triggered
   - If the new provider is unavailable, shows a notice and skips reindex (user can manually reindex later)
   - Changing settings within the same provider (e.g., endpoint, model) does not trigger auto-reindex
+
+### Removed
+
+- Debug endpoints (`/debug`, `/debug/tools`) removed from MCP host - these exposed internal state and were not part of the public API
 
 ### Added
 

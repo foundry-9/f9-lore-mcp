@@ -21,12 +21,6 @@ export default defineConfig([
     rules: {
       // Turn off sample-names rule (not applicable to this project)
       "obsidianmd/sample-names": "off",
-      // Configure sentence case with our custom acronyms and brands
-      "obsidianmd/ui/sentence-case": ["error", {
-        acronyms: ["MCP", "SSE", "TF-IDF", "IDF"],
-        brands: ["Ollama", "OpenAI", "Claude", "Claude Desktop", "Lore MCP", "Azure OpenAI", "Host"],
-        allowAutoFix: true,
-      }],
       // Disable strict TypeScript rules that conflict with Obsidian's untyped APIs
       // (plugin.loadData() returns any, JSON.parse() returns any)
       "@typescript-eslint/no-unsafe-assignment": "off",

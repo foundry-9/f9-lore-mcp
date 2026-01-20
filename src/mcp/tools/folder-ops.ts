@@ -28,7 +28,7 @@ export function registerFolderOpsTools(mcp: McpServer, app: App): void {
           .describe("Vault-relative parent folder path. If omitted, lists all folders in the vault."),
       }),
     },
-    async (args) => {
+    (args) => {
       const { folder } = args;
       const allFolders: string[] = [];
       const root = app.vault.getRoot();
@@ -50,7 +50,7 @@ export function registerFolderOpsTools(mcp: McpServer, app: App): void {
         folders = allFolders;
       }
       folders.sort();
-      return textResponse(folders.length > 0 ? folders.join("\n") : "(no folders found)");
+      return Promise.resolve(textResponse(folders.length > 0 ? folders.join("\n") : "(no folders found)"));
     }
   );
 
@@ -66,7 +66,7 @@ export function registerFolderOpsTools(mcp: McpServer, app: App): void {
           .describe("Vault-relative folder path to list notes from. If omitted, lists all notes in the vault."),
       }),
     },
-    async (args) => {
+    (args) => {
       const { folder } = args;
       const allFiles = app.vault.getMarkdownFiles();
 
@@ -78,7 +78,7 @@ export function registerFolderOpsTools(mcp: McpServer, app: App): void {
         files = allFiles;
       }
       const paths = files.map((f) => f.path).sort();
-      return textResponse(paths.length > 0 ? paths.join("\n") : "(no notes found)");
+      return Promise.resolve(textResponse(paths.length > 0 ? paths.join("\n") : "(no notes found)"));
     }
   );
 

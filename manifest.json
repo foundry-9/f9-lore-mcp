@@ -1,7 +1,7 @@
 {
   "id": "f9-lore-mcp",
   "name": "F9 Lore MCP",
-  "version": "1.2.2",
+  "version": "1.2.3",
   "minAppVersion": "1.5.12",
   "description": "Host an MCP server to expose vault operations via HTTP/SSE endpoints and provide vector search.",
   "author": "Charles Sebold",

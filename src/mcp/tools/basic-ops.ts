@@ -18,9 +18,9 @@ import {
  */
 export function registerBasicOpsTools(mcp: McpServer, app: App): void {
   // Register simple ping tool
-  mcp.registerTool("ping", {}, async () => ({
+  mcp.registerTool("ping", {}, () => (new Promise((resolve) => resolve({
     content: [{ type: "text", text: "pong from Lore" }],
-  }));
+  }))));
 
   // Register note creation tool
   mcp.registerTool(

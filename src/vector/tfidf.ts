@@ -114,16 +114,16 @@ export class TfidfClient implements EmbeddingProvider {
    * @param texts - Array of text strings to embed
    * @returns Array of dense TF-IDF vectors (one per input text)
    */
-  async embed(texts: string[]): Promise<number[][]> {
+  embed(texts: string[]): Promise<number[][]> {
     if (!this.isFitted) {
       // Not fitted yet - return empty arrays
       // This happens during incremental indexing before first reindex
       console.warn("F9 MCP: TF-IDF not fitted, returning empty embeddings. Run reindex to build vocabulary.");
-      return texts.map(() => []);
+      return new Promise((resolve) => resolve(texts.map(() => [])));
     }
 
     // Transform texts to TF-IDF vectors using existing vocabulary
-    return texts.map((text) => this.transformToDense(text));
+    return Promise.resolve(texts.map((text) => this.transformToDense(text)));
   }
 
   /**
@@ -279,8 +279,8 @@ export class TfidfClient implements EmbeddingProvider {
    *
    * @returns Always true
    */
-  async isAvailable(): Promise<boolean> {
-    return true;
+  isAvailable(): Promise<boolean> {
+    return new Promise((resolve) => resolve(true));
   }
 
   /**

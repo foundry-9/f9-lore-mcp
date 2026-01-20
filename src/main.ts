@@ -5,6 +5,31 @@ import { VectorSearchSettings, DEFAULT_VECTOR_SETTINGS } from "./vector/types";
 import type { ExtendedIndexingStatus } from "./vector/types";
 import { truncateString } from "./mcp/utils";
 
+
+/**
+ * Workaround to allow special words into UI with correct casing,
+ * and sentence-case the rest.
+ *
+ * @param {string} text
+ * @return {*} 
+ */
+const allowUiSpecialWords = (text:string): string => {
+  const acronyms = ["MCP", "SSE", "TF-IDF", "IDF", "URL", "API", "HTTPS", "TLS", "DNS"];
+  const brands = ["Ollama", "OpenAI", "Claude", "Claude Desktop", "Lore MCP", "Azure OpenAI"];
+  const specialWords = ["Host"];
+  if([...acronyms, ...brands, ...specialWords].includes(text)) {
+    return text; // already has correct casing
+  }
+
+  // Source - https://stackoverflow.com/a
+  // Posted by Samuli Hakoniemi, modified by community. See post 'Timeline' for change history
+  // Retrieved 2026-01-20, License - CC BY-SA 3.0
+
+  const rg = /(^\w{1}|\.\s*\w{1})/gi;
+  text = text.replace(rg, (toReplace) => toReplace.toUpperCase());
+  return text;
+}
+
 /**
  * Internal Obsidian setting manager interface (not part of public API).
  * Used to programmatically open plugin settings.
@@ -130,9 +155,9 @@ export default class F9LoreMCPPlugin extends Plugin {
 
     const ribbon = this.addRibbonIcon(
       "dice",
-      "F9 Lore MCP",
+      allowUiSpecialWords("F9 Lore MCP"),
       () => {
-        new Notice("Hello from the Lore MCP plugin!");
+        new Notice(allowUiSpecialWords("Hello from the Lore MCP plugin!"));
       }
     );
     ribbon.addClass("f9-lore-mcp-ribbon-icon");
@@ -150,7 +175,7 @@ export default class F9LoreMCPPlugin extends Plugin {
     this.addCommand({
       id: "say-hello",
       name: "Say hello",
-      callback: () => new Notice("Lore MCP says hello"),
+      callback: () => new Notice(allowUiSpecialWords("Lore MCP says hello")),
     });
 
     this.addSettingTab(new F9LoreMCPSettingTab(this.app, this));
@@ -441,27 +466,27 @@ class F9LoreMCPSettingTab extends PluginSettingTab {
     });
 
     // MCP Connection
-    new Setting(helpContainer).setName("MCP connection").setHeading();
+    new Setting(helpContainer).setName(allowUiSpecialWords("MCP connection")).setHeading();
     helpContainer.createEl("p", {
-      text: "This server uses streamable SSE transport only. If your client requires stdio (as some MCP integrations do), you can bridge the connection using MCP-remote or a similar proxy. The default configuration snippet for Claude Desktop includes MCP-remote already, so it should just work. Once connected, you can instruct Claude to access your vault exclusively through this MCP—giving you a controlled, obsidian-native channel for ai interaction with your notes.",
+      text: allowUiSpecialWords("This server uses streamable SSE transport only. If your client requires stdio (as some MCP integrations do), you can bridge the connection using MCP-remote or a similar proxy. The default configuration snippet for Claude Desktop includes MCP-remote already, so it should just work. Once connected, you can instruct Claude to access your vault exclusively through this MCP—giving you a controlled, obsidian-native channel for ai interaction with your notes."),
       cls: "f9-help-text",
     });
 
     // Search: TF-IDF
-    new Setting(helpContainer).setName("Search: TF-IDF").setHeading();
+    new Setting(helpContainer).setName(allowUiSpecialWords("Search: TF-IDF")).setHeading();
     helpContainer.createEl("p", {
-      text: "The built-in TF-IDF search is fast and free, but it's only as smart as your own organization. It matches words, not meaning—so if your vault uses consistent terminology and well-structured links, it will serve you well. If your notes are more freeform or you need genuine semantic understanding, consider enabling Ollama or OpenAI embeddings instead.",
+      text: allowUiSpecialWords("The built-in TF-IDF search is fast and free, but it's only as smart as your own organization. It matches words, not meaning—so if your vault uses consistent terminology and well-structured links, it will serve you well. If your notes are more freeform or you need genuine semantic understanding, consider enabling Ollama or OpenAI embeddings instead."),
       cls: "f9-help-text",
     });
     helpContainer.createEl("p", {
-      text: "Note that TF-IDF learns its vocabulary from your existing notes at index time. If you add significant new terminology over time—new characters, locations, concepts—you'll want to reindex your vault so the search can recognize and weight those terms properly.",
+      text: allowUiSpecialWords("Note that TF-IDF learns its vocabulary from your existing notes at index time. If you add significant new terminology over time—new characters, locations, concepts—you'll want to reindex your vault so the search can recognize and weight those terms properly."),
       cls: "f9-help-text",
     });
 
     // Search: embeddings
-    new Setting(helpContainer).setName("Search: embeddings (Ollama / OpenAI)").setHeading();
+    new Setting(helpContainer).setName(allowUiSpecialWords("Search: embeddings (Ollama / OpenAI)")).setHeading();
     helpContainer.createEl("p", {
-      text: "Embedding-based search understands language, not just keywords. It can find conceptually related notes even when the wording differs. The trade-off is cost (for OpenAI) or local compute (for Ollama). Use this if your vault is large, loosely organized, or if you frequently search for ideas rather than specific terms.",
+      text: allowUiSpecialWords("Embedding-based search understands language, not just keywords. It can find conceptually related notes even when the wording differs. The trade-off is cost (for OpenAI) or local compute (for Ollama). Use this if your vault is large, loosely organized, or if you frequently search for ideas rather than specific terms."),
       cls: "f9-help-text",
     });
     helpContainer.createEl("p", {
@@ -573,8 +598,8 @@ class F9LoreMCPSettingTab extends PluginSettingTab {
    */
   private renderMcpSettings(containerEl: HTMLElement): void {
     new Setting(containerEl)
-      .setName("Enable MCP server")
-      .setDesc("Host an MCP server inside obsidian on 127.0.0.1")
+      .setName(allowUiSpecialWords("Enable MCP server"))
+      .setDesc(allowUiSpecialWords("Host an MCP server inside obsidian on 127.0.0.1"))
       .addToggle((toggle) =>
         toggle
           .setValue(this.plugin.settings.mcpEnabled)
@@ -586,8 +611,8 @@ class F9LoreMCPSettingTab extends PluginSettingTab {
       );
 
     new Setting(containerEl)
-      .setName("MCP port")
-      .setDesc("Local port for the MCP endpoint")
+      .setName(allowUiSpecialWords("MCP port"))
+      .setDesc(allowUiSpecialWords("Local port for the MCP endpoint"))
       .addText((text) =>
         text
           .setPlaceholder("3030")
@@ -602,8 +627,8 @@ class F9LoreMCPSettingTab extends PluginSettingTab {
       );
 
     new Setting(containerEl)
-      .setName("Dns rebinding protection")
-      .setDesc("Validate Host header for local requests")
+      .setName(allowUiSpecialWords("DNS rebinding protection"))
+      .setDesc(allowUiSpecialWords("Validate Host header for local requests"))
       .addToggle((toggle) =>
         toggle
           .setValue(this.plugin.settings.mcpDnsRebindingProtection)
@@ -630,8 +655,8 @@ class F9LoreMCPSettingTab extends PluginSettingTab {
       );
 
     new Setting(containerEl)
-      .setName("Enable https")
-      .setDesc("Use https instead of http. Required for Claude Desktop.")
+      .setName(allowUiSpecialWords("Enable https"))
+      .setDesc(allowUiSpecialWords("Use https instead of http. Required for Claude Desktop."))
       .addToggle((toggle) =>
         toggle
           .setValue(this.plugin.settings.mcpHttpsEnabled)
@@ -645,8 +670,8 @@ class F9LoreMCPSettingTab extends PluginSettingTab {
     // Only show TLS settings when HTTPS is enabled
     if (this.plugin.settings.mcpHttpsEnabled) {
       new Setting(containerEl)
-        .setName("Tls certificate")
-        .setDesc("Paste the contents of your mkcert certificate (pem format)")
+        .setName(allowUiSpecialWords("TLS certificate"))
+        .setDesc(allowUiSpecialWords("Paste the contents of your mkcert certificate (PEM format)"))
         .addTextArea((text) =>
           text
             .setPlaceholder("-----begin certificate-----\n...\n-----end certificate-----")
@@ -664,8 +689,8 @@ class F9LoreMCPSettingTab extends PluginSettingTab {
         });
 
       new Setting(containerEl)
-        .setName("Tls private key")
-        .setDesc("Paste the contents of your mkcert private key (pem format)")
+        .setName(allowUiSpecialWords("TLS private key"))
+        .setDesc(allowUiSpecialWords("Paste the contents of your mkcert private key (PEM format)"))
         .addTextArea((text) =>
           text
             .setPlaceholder("-----begin private key-----\n...\n-----end private key-----")
@@ -728,8 +753,8 @@ class F9LoreMCPSettingTab extends PluginSettingTab {
       .addDropdown((dropdown) =>
         dropdown
           .addOption("ollama", "Ollama (local)")
-          .addOption("openai", "OpenAI")
-          .addOption("tfidf", "TF-IDF (no network required)")
+          .addOption("openai", allowUiSpecialWords("OpenAI"))
+          .addOption("tfidf", allowUiSpecialWords("TF-IDF (no network required)"))
           .setValue(this.plugin.settings.vectorSearch.embeddingProvider)
           .onChange(async (value) => {
             const newProvider = value as "ollama" | "openai" | "tfidf";
@@ -869,9 +894,9 @@ class F9LoreMCPSettingTab extends PluginSettingTab {
   private showProviderUnavailableNotice(): void {
     const provider = this.plugin.settings.vectorSearch.embeddingProvider;
     if (provider === "ollama") {
-      new Notice("Cannot connect to Ollama. Is it running?");
+      new Notice(allowUiSpecialWords("Cannot connect to Ollama. Is it running?"));
     } else if (provider === "openai") {
-      new Notice("Cannot connect to OpenAI. Check your api key.");
+      new Notice(allowUiSpecialWords("Cannot connect to OpenAI. Check your api key."));
     }
     // TF-IDF is always available, so no error message needed
   }
@@ -908,11 +933,11 @@ class F9LoreMCPSettingTab extends PluginSettingTab {
    */
   private renderOllamaSettings(containerEl: HTMLElement): void {
     new Setting(containerEl)
-      .setName("Ollama url")
-      .setDesc("Url of your Ollama instance")
+      .setName(allowUiSpecialWords("Ollama URL"))
+      .setDesc(allowUiSpecialWords("URL of your Ollama instance"))
       .addText((text) =>
         text
-          .setPlaceholder("Http://localhost:11434")
+          .setPlaceholder(allowUiSpecialWords("http://localhost:11434"))
           .setValue(this.plugin.settings.vectorSearch.ollamaUrl)
           .onChange(async (value) => {
             this.plugin.settings.vectorSearch.ollamaUrl = value;
@@ -941,8 +966,8 @@ class F9LoreMCPSettingTab extends PluginSettingTab {
    */
   private renderOpenAISettings(containerEl: HTMLElement): void {
     new Setting(containerEl)
-      .setName("OpenAI api key")
-      .setDesc("Your OpenAI api key (stored locally)")
+      .setName(allowUiSpecialWords("OpenAI API key"))
+      .setDesc(allowUiSpecialWords("Your OpenAI API key (stored locally)"))
       .addText((text) => {
         text
           .setPlaceholder("Sk-...")
@@ -968,7 +993,7 @@ class F9LoreMCPSettingTab extends PluginSettingTab {
 
     new Setting(containerEl)
       .setName("Embedding model")
-      .setDesc("OpenAI embedding model to use")
+      .setDesc(allowUiSpecialWords("OpenAI embedding model to use"))
       .addDropdown((dropdown) => {
         dropdown.addOption("text-embedding-3-small", "Text-embedding-3-small (1536 dim, cheapest)");
         dropdown.addOption("text-embedding-3-large", "Text-embedding-3-large (3072 dim, best)");
@@ -1006,8 +1031,8 @@ class F9LoreMCPSettingTab extends PluginSettingTab {
 
     // Optional custom API endpoint
     new Setting(containerEl)
-      .setName("Custom api endpoint (optional)")
-      .setDesc("For Azure OpenAI or compatible APIs. Leave empty for standard OpenAI.")
+      .setName(allowUiSpecialWords("Custom API endpoint (optional)"))
+      .setDesc(allowUiSpecialWords("For Azure OpenAI or compatible APIs. Leave empty for standard OpenAI."))
       .addText((text) =>
         text
           .setPlaceholder("https://api.openai.com/v1")
@@ -1025,7 +1050,7 @@ class F9LoreMCPSettingTab extends PluginSettingTab {
    */
   private renderTfidfSettings(containerEl: HTMLElement): void {
     new Setting(containerEl)
-      .setName("TF-IDF information")
+      .setName(allowUiSpecialWords("TF-IDF information"))
       .setDesc(
         "TF-IDF (Term Frequency-Inverse Document Frequency) is a keyword-based search method. " +
           "It works fully offline with no external services required. " +
@@ -1094,8 +1119,8 @@ class F9LoreMCPSettingTab extends PluginSettingTab {
     const configJson = this.generateClaudeDesktopConfig();
 
     new Setting(containerEl)
-      .setName("Claude_desktop_config.json snippet")
-      .setDesc("Add this to your Claude Desktop config file under \"mcpServers\"")
+      .setName(allowUiSpecialWords("claude_desktop_config.json snippet"))
+      .setDesc(allowUiSpecialWords("Add this to your Claude Desktop config file under \"mcpServers\""))
       .addButton((btn) =>
         btn
           .setButtonText("Copy")

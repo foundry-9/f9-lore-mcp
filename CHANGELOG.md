@@ -4,6 +4,21 @@
 
 ### Changed
 
+- **Obsidian plugin submission compliance fixes** to pass community plugin review
+  - Replaced `fetch()` with Obsidian's `requestUrl()` API in Ollama and OpenAI clients
+  - Replaced `Vault.trash()` with `FileManager.trashFile()` for file deletion
+  - Converted CommonJS `require()` imports to ES6 imports in provider factory
+  - Replaced `as TFolder` type casts with `instanceof TFolder` runtime checks
+  - Removed `any` type usage by adding proper interface for internal settings API
+  - Replaced HTML heading elements (`createEl("h2")`, `createEl("h4")`) with Setting API's `.setHeading()`
+  - Replaced inline styles with CSS classes (`f9-monospace-textarea`, `f9-mcp-config-display`)
+  - Fixed command ID to exclude plugin identifier prefix (Obsidian adds it automatically)
+  - Applied sentence case to all UI text (settings names, button labels, headings)
+
+## [1.2.0]
+
+### Changed
+
 - **Improved `create_note` and `update_note` tool descriptions** to counsel LLM consumers to prefer granular structure tools when possible
   - `create_note` now notes that `insert_content`, `update_section`, and `update_heading_content` are more token-efficient for adding content to existing notes
   - `update_note` now recommends partial edit tools (`update_section`, `update_heading_content`, `update_list_item`, `update_frontmatter`, `insert_content`) to reduce token usage and risk of unintended changes

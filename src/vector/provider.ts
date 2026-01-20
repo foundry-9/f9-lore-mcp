@@ -5,6 +5,10 @@
  * allowing the VectorIndexer to work with any provider.
  */
 
+import { OllamaClient } from "./ollama";
+import { OpenAIClient } from "./openai";
+import { TfidfClient } from "./tfidf";
+
 /** Supported embedding provider types */
 export type EmbeddingProviderType = "ollama" | "openai" | "tfidf";
 
@@ -59,25 +63,19 @@ export function createEmbeddingProvider(
   config: EmbeddingProviderConfig
 ): EmbeddingProvider {
   switch (config.provider) {
-    case "openai": {
-      const { OpenAIClient } = require("./openai");
+    case "openai":
       return new OpenAIClient(
         config.openaiApiKey ?? "",
         config.openaiModel ?? "text-embedding-3-small",
         config.openaiBaseUrl
       );
-    }
-    case "tfidf": {
-      const { TfidfClient } = require("./tfidf");
+    case "tfidf":
       return new TfidfClient();
-    }
     case "ollama":
-    default: {
-      const { OllamaClient } = require("./ollama");
+    default:
       return new OllamaClient(
         config.ollamaUrl ?? "http://localhost:11434",
         config.ollamaModel ?? "nomic-embed-text:latest"
       );
-    }
   }
 }

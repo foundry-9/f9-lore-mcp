@@ -2,6 +2,7 @@
  * Ollama API client for embeddings
  */
 
+import { requestUrl, RequestUrlResponse } from "obsidian";
 import type { EmbeddingProvider } from "./provider";
 
 /** Response from Ollama /api/embed endpoint */
@@ -30,21 +31,23 @@ export class OllamaClient implements EmbeddingProvider {
       return [];
     }
 
-    const response = await fetch(`${this.baseUrl}/api/embed`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: this.model,
-        input: texts,
-      }),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Ollama embed failed (${response.status}): ${errorText}`);
+    let response: RequestUrlResponse;
+    try {
+      response = await requestUrl({
+        url: `${this.baseUrl}/api/embed`,
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: this.model,
+          input: texts,
+        }),
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      throw new Error(`Ollama embed failed: ${message}`);
     }
 
-    const data: OllamaEmbedResponse = await response.json();
+    const data: OllamaEmbedResponse = response.json;
 
     if (!data.embeddings || data.embeddings.length !== texts.length) {
       throw new Error(
@@ -62,8 +65,11 @@ export class OllamaClient implements EmbeddingProvider {
    */
   async isAvailable(): Promise<boolean> {
     try {
-      const response = await fetch(`${this.baseUrl}/api/tags`);
-      return response.ok;
+      await requestUrl({
+        url: `${this.baseUrl}/api/tags`,
+        method: "GET",
+      });
+      return true;
     } catch {
       return false;
     }

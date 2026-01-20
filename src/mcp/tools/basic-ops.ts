@@ -172,7 +172,7 @@ export function registerBasicOpsTools(mcp: McpServer, app: App): void {
       const { path } = args;
       const lookup = getFileOrError(app, path);
       if ("error" in lookup) return lookup.error;
-      await app.vault.trash(lookup.file, true);
+      await app.fileManager.trashFile(lookup.file);
       return textResponse(`Deleted note: ${lookup.normalizedPath}`);
     }
   );

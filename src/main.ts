@@ -5,6 +5,22 @@ import { VectorSearchSettings, DEFAULT_VECTOR_SETTINGS } from "./vector/types";
 import type { ExtendedIndexingStatus } from "./vector/types";
 import { truncateString } from "./mcp/utils";
 
+/**
+ * Internal Obsidian setting manager interface (not part of public API).
+ * Used to programmatically open plugin settings.
+ */
+interface ObsidianSettingManager {
+  open(): void;
+  openTabById(id: string): void;
+}
+
+/**
+ * Extended App interface with internal setting property.
+ */
+interface AppWithSettings extends App {
+  setting: ObsidianSettingManager;
+}
+
 interface F9LoreMCPSettings {
   mcpEnabled: boolean;
   mcpPort: number;
@@ -132,9 +148,9 @@ export default class F9LoreMCPPlugin extends Plugin {
     );
 
     this.addCommand({
-      id: "f9-lore-mcp-say-hello",
-      name: "Say Hello",
-      callback: () => new Notice("F9 MCP says hello 👋"),
+      id: "say-hello",
+      name: "Say hello",
+      callback: () => new Notice("F9 MCP says hello"),
     });
 
     this.addSettingTab(new F9LoreMCPSettingTab(this.app, this));
@@ -369,10 +385,9 @@ export default class F9LoreMCPPlugin extends Plugin {
     }
 
     // Open settings and navigate to this plugin's tab
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const setting = (this.app as any).setting;
-    setting.open();
-    setting.openTabById(this.manifest.id);
+    const appWithSettings = this.app as AppWithSettings;
+    appWithSettings.setting.open();
+    appWithSettings.setting.openTabById(this.manifest.id);
   }
 }
 
@@ -395,7 +410,7 @@ class F9LoreMCPSettingTab extends PluginSettingTab {
     const openAccordion = this.plugin.pendingAccordion;
     this.plugin.pendingAccordion = null;
 
-    containerEl.createEl("h2", { text: "F9 Lore MCP Settings" });
+    new Setting(containerEl).setName("F9 Lore MCP settings").setHeading();
 
     // Status section at the top
     this.renderStatusSection(containerEl);
@@ -428,14 +443,14 @@ class F9LoreMCPSettingTab extends PluginSettingTab {
     });
 
     // MCP Connection
-    helpContainer.createEl("h4", { text: "MCP Connection" });
+    new Setting(helpContainer).setName("MCP connection").setHeading();
     helpContainer.createEl("p", {
       text: "This server uses streamable SSE transport only. If your client requires stdio (as some MCP integrations do), you can bridge the connection using mcp-remote or a similar proxy. The default configuration snippet for Claude Desktop includes mcp-remote already, so it should just work. Once connected, you can instruct Claude to access your vault exclusively through this MCP—giving you a controlled, Obsidian-native channel for AI interaction with your notes.",
       cls: "f9-help-text",
     });
 
     // Search: TF-IDF
-    helpContainer.createEl("h4", { text: "Search: TF-IDF" });
+    new Setting(helpContainer).setName("Search: TF-IDF").setHeading();
     helpContainer.createEl("p", {
       text: "The built-in TF-IDF search is fast and free, but it's only as smart as your own organization. It matches words, not meaning—so if your vault uses consistent terminology and well-structured links, it will serve you well. If your notes are more freeform or you need genuine semantic understanding, consider enabling Ollama or OpenAI embeddings instead.",
       cls: "f9-help-text",
@@ -446,7 +461,7 @@ class F9LoreMCPSettingTab extends PluginSettingTab {
     });
 
     // Search: Embeddings
-    helpContainer.createEl("h4", { text: "Search: Embeddings (Ollama / OpenAI)" });
+    new Setting(helpContainer).setName("Search: Embeddings (Ollama / OpenAI)").setHeading();
     helpContainer.createEl("p", {
       text: "Embedding-based search understands language, not just keywords. It can find conceptually related notes even when the wording differs. The trade-off is cost (for OpenAI) or local compute (for Ollama). Use this if your vault is large, loosely organized, or if you frequently search for ideas rather than specific terms.",
       cls: "f9-help-text",
@@ -646,10 +661,7 @@ class F9LoreMCPSettingTab extends PluginSettingTab {
         .then((setting) => {
           const textarea = setting.controlEl.querySelector("textarea");
           if (textarea) {
-            textarea.style.width = "100%";
-            textarea.style.height = "100px";
-            textarea.style.fontFamily = "monospace";
-            textarea.style.fontSize = "11px";
+            textarea.addClass("f9-monospace-textarea");
           }
         });
 
@@ -668,10 +680,7 @@ class F9LoreMCPSettingTab extends PluginSettingTab {
         .then((setting) => {
           const textarea = setting.controlEl.querySelector("textarea");
           if (textarea) {
-            textarea.style.width = "100%";
-            textarea.style.height = "100px";
-            textarea.style.fontFamily = "monospace";
-            textarea.style.fontSize = "11px";
+            textarea.addClass("f9-monospace-textarea");
           }
         });
 
@@ -752,7 +761,7 @@ class F9LoreMCPSettingTab extends PluginSettingTab {
     }
 
     // Index operations section
-    containerEl.createEl("h4", { text: "Index Operations" });
+    new Setting(containerEl).setName("Index operations").setHeading();
 
     // Refresh Index button
     new Setting(containerEl)
@@ -793,7 +802,7 @@ class F9LoreMCPSettingTab extends PluginSettingTab {
       )
       .addButton((btn) =>
         btn
-          .setButtonText("Reindex Vault")
+          .setButtonText("Reindex vault")
           .setWarning()
           .onClick(async () => {
             const indexer = this.plugin.vectorIndexer;
@@ -1018,7 +1027,7 @@ class F9LoreMCPSettingTab extends PluginSettingTab {
    */
   private renderTfidfSettings(containerEl: HTMLElement): void {
     new Setting(containerEl)
-      .setName("TF-IDF Information")
+      .setName("TF-IDF information")
       .setDesc(
         "TF-IDF (Term Frequency-Inverse Document Frequency) is a keyword-based search method. " +
           "It works fully offline with no external services required. " +
@@ -1105,12 +1114,6 @@ class F9LoreMCPSettingTab extends PluginSettingTab {
       cls: "f9-mcp-config-display",
     });
     configDisplay.readOnly = true;
-    configDisplay.style.width = "100%";
-    configDisplay.style.height = "140px";
-    configDisplay.style.fontFamily = "monospace";
-    configDisplay.style.fontSize = "11px";
-    configDisplay.style.marginBottom = "1em";
-    configDisplay.style.resize = "vertical";
 
     // Add terminal command hint
     containerEl.createEl("p", {

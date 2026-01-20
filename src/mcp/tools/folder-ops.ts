@@ -2,7 +2,8 @@
  * Folder operations: list_folders, list_notes, create_folder, delete_folder
  */
 
-import type { App, TFolder } from "obsidian";
+import { TFolder } from "obsidian";
+import type { App } from "obsidian";
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import {
@@ -33,9 +34,9 @@ export function registerFolderOpsTools(mcp: McpServer, app: App): void {
       const root = app.vault.getRoot();
       const collectFolders = (f: TFolder) => {
         for (const child of f.children) {
-          if ("children" in child) {
+          if (child instanceof TFolder) {
             allFolders.push(child.path);
-            collectFolders(child as TFolder);
+            collectFolders(child);
           }
         }
       };
@@ -129,25 +130,24 @@ export function registerFolderOpsTools(mcp: McpServer, app: App): void {
       if (!folder) {
         return folderNotFoundError(normalizedPath);
       }
-      if (!("children" in folder)) {
+      if (!(folder instanceof TFolder)) {
         return {
           content: [{ type: "text", text: `Path is not a folder: ${normalizedPath}` }],
           isError: true,
         };
       }
-      const typedFolder = folder as TFolder;
-      if (!delete_if_not_empty && typedFolder.children.length > 0) {
+      if (!delete_if_not_empty && folder.children.length > 0) {
         return {
           content: [
             {
               type: "text",
-              text: `Folder is not empty: ${normalizedPath} (contains ${typedFolder.children.length} items). Set delete_if_not_empty to true to delete anyway.`,
+              text: `Folder is not empty: ${normalizedPath} (contains ${folder.children.length} items). Set delete_if_not_empty to true to delete anyway.`,
             },
           ],
           isError: true,
         };
       }
-      await app.vault.trash(folder, true);
+      await app.fileManager.trashFile(folder);
       return textResponse(`Deleted folder: ${normalizedPath}`);
     }
   );

@@ -2,6 +2,7 @@
  * OpenAI API client for embeddings
  */
 
+import { requestUrl, RequestUrlResponse } from "obsidian";
 import type { EmbeddingProvider } from "./provider";
 
 /** Response from OpenAI /v1/embeddings endpoint */
@@ -56,32 +57,37 @@ export class OpenAIClient implements EmbeddingProvider {
       throw new Error("OpenAI API key is not configured");
     }
 
-    const response = await fetch(`${this.baseUrl}/embeddings`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${this.apiKey}`,
-      },
-      body: JSON.stringify({
-        input: texts,
-        model: this.model,
-      }),
-    });
-
-    if (!response.ok) {
-      let message = `HTTP ${response.status}`;
-      try {
-        const errorData = (await response.json()) as OpenAIErrorResponse;
-        if (errorData?.error?.message) {
-          message = errorData.error.message;
+    let response: RequestUrlResponse;
+    try {
+      response = await requestUrl({
+        url: `${this.baseUrl}/embeddings`,
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${this.apiKey}`,
+        },
+        body: JSON.stringify({
+          input: texts,
+          model: this.model,
+        }),
+      });
+    } catch (err) {
+      let message = err instanceof Error ? err.message : String(err);
+      // Try to extract OpenAI error message from the error
+      if (err instanceof Error && "json" in err) {
+        try {
+          const errorData = (err as { json: OpenAIErrorResponse }).json;
+          if (errorData?.error?.message) {
+            message = errorData.error.message;
+          }
+        } catch {
+          // Ignore JSON parse errors
         }
-      } catch {
-        // Ignore JSON parse errors, use HTTP status
       }
       throw new Error(`OpenAI embed failed: ${message}`);
     }
 
-    const data: OpenAIEmbedResponse = await response.json();
+    const data: OpenAIEmbedResponse = response.json;
 
     if (!data.data || data.data.length !== texts.length) {
       throw new Error(
@@ -106,7 +112,8 @@ export class OpenAIClient implements EmbeddingProvider {
 
     try {
       // Do a minimal embed to verify the API key works
-      const response = await fetch(`${this.baseUrl}/embeddings`, {
+      await requestUrl({
+        url: `${this.baseUrl}/embeddings`,
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -117,7 +124,7 @@ export class OpenAIClient implements EmbeddingProvider {
           model: this.model,
         }),
       });
-      return response.ok;
+      return true;
     } catch {
       return false;
     }

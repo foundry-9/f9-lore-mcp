@@ -162,7 +162,7 @@ export class VectorIndexer {
         await this.cleanupLegacyData();
         return;
       }
-    } catch (err) {
+    } catch {
       // Cache file doesn't exist or is invalid, check for legacy data
     }
 
@@ -220,7 +220,7 @@ export class VectorIndexer {
       if (cleaned) {
         await this.plugin.saveData(data);
       }
-    } catch (err) {
+    } catch {
       // Failed to clean up legacy data
     }
   }
@@ -329,7 +329,6 @@ export class VectorIndexer {
   async checkForStaleFiles(): Promise<number> {
     const files = this.app.vault.getMarkdownFiles();
     let staleCount = 0;
-    let hashChecks = 0;
     let mtimeUpdates = 0;
 
     for (const file of files) {
@@ -350,7 +349,6 @@ export class VectorIndexer {
       }
 
       // Mtime changed - check content hash to detect actual changes
-      hashChecks++;
       const content = await this.app.vault.read(file);
       const currentHash = computeContentHash(content);
 
@@ -493,7 +491,7 @@ export class VectorIndexer {
             for (const chunk of chunks) {
               allChunks.push(filePrefix + chunk);
             }
-          } catch (err) {
+          } catch {
             // Ignore errors during collection - we'll report them during indexing
           }
         }
@@ -576,7 +574,7 @@ export class VectorIndexer {
 
     // Start a new timer for this file
     const timer = setTimeout(
-      () => this.processFileAfterDebounce(path),
+      () => { void this.processFileAfterDebounce(path); },
       this.settings.debounceMs
     );
     this.fileDebounceTimers.set(path, timer);
@@ -601,7 +599,7 @@ export class VectorIndexer {
     // If already indexing, re-schedule for a short retry (not full debounce)
     if (this.isIndexing) {
       const timer = setTimeout(
-        () => this.processFileAfterDebounce(path),
+        () => { void this.processFileAfterDebounce(path); },
         100 // Short retry delay, not full debounceMs
       );
       this.fileDebounceTimers.set(path, timer);
@@ -754,7 +752,7 @@ export class VectorIndexer {
       clearTimeout(timer);
       this.fileDebounceTimers.delete(oldPath);
       const newTimer = setTimeout(
-        () => this.processFileAfterDebounce(newPath),
+        () => { void this.processFileAfterDebounce(newPath); },
         this.settings.debounceMs
       );
       this.fileDebounceTimers.set(newPath, newTimer);

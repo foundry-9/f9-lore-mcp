@@ -93,8 +93,6 @@ export function findNormalizedMatches(
  * Convert an NFD string position to the corresponding position in the original string.
  */
 function nfdToOriginalPosition(original: string, nfdPos: number): number {
-  const nfd = original.normalize("NFD");
-
   // Walk through original string, tracking NFD position
   let origPos = 0;
   let currentNfdPos = 0;

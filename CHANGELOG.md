@@ -2,6 +2,31 @@
 
 ## [Unreleased]
 
+## [1.2.2]
+
+### Changed
+
+- **Additional Obsidian plugin submission compliance fixes** to pass community plugin review
+  - Added `void` operator to mark intentionally unhandled promises (clipboard write, startup stale file check)
+  - Removed unnecessary try/catch wrappers that just re-threw errors in MCP host
+  - Removed unused `TFile` import from text-search.ts
+  - Removed unused `err` parameter in catch blocks (using parameterless catch syntax)
+  - Removed unused `hashChecks` and `nfd` variables
+  - Removed main settings heading with plugin name ("F9 Lore MCP settings")
+  - Applied sentence case to accordion titles and help section headings
+  - Updated Notice messages to use sentence case and avoid plugin name prefixes
+  - Wrapped async HTTP request handler to satisfy TypeScript strict promise checks
+  - Added `void` to setTimeout callbacks with async functions in vector indexer
+
+### Added
+
+- **ESLint configuration** with `eslint-plugin-obsidianmd` for Obsidian plugin guidelines
+  - Added `eslint.config.mjs` with recommended plugin rules
+  - Configured custom acronyms (MCP, SSE, TF-IDF) and brands (Ollama, OpenAI, Claude Desktop)
+  - Enabled browser and Node.js globals for proper environment detection
+
+## [1.2.1]
+
 ### Changed
 
 - **Obsidian plugin submission compliance fixes** to pass community plugin review

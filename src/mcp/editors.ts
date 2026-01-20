@@ -382,7 +382,7 @@ export function updateFrontmatter(
   } else if (hasFrontmatter && cache.frontmatter) {
     // Merge with existing
     newFrontmatter = { ...cache.frontmatter };
-    delete (newFrontmatter as Record<string, unknown>).position; // Remove internal key
+    delete newFrontmatter.position; // Remove internal key
 
     for (const [key, value] of Object.entries(updates)) {
       if (value === null) {
@@ -472,12 +472,8 @@ function formatYamlLine(key: string, value: unknown): string {
     return `${key}:\n${items.join("\n")}`;
   }
 
-  if (typeof value === "object") {
-    // For objects, use JSON-ish format inline
-    return `${key}: ${JSON.stringify(value)}`;
-  }
-
-  return `${key}: ${String(value)}`;
+  // For objects, null, or other types, use JSON serialization
+  return `${key}: ${JSON.stringify(value)}`;
 }
 
 // ============================================================================

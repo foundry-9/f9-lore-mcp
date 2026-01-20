@@ -124,7 +124,7 @@ export default class F9LoreMCPPlugin extends Plugin {
 
       // Check for stale files on startup (after a brief delay)
       setTimeout(() => {
-        this.vectorIndexer?.checkForStaleFiles();
+        void this.vectorIndexer?.checkForStaleFiles();
       }, 2000);
     }
 
@@ -132,7 +132,7 @@ export default class F9LoreMCPPlugin extends Plugin {
       "dice",
       "F9 Lore MCP",
       () => {
-        new Notice("F9 Lore MCP: Hello from your plugin!");
+        new Notice("Hello from the Lore MCP plugin!");
       }
     );
     ribbon.addClass("f9-lore-mcp-ribbon-icon");
@@ -150,7 +150,7 @@ export default class F9LoreMCPPlugin extends Plugin {
     this.addCommand({
       id: "say-hello",
       name: "Say hello",
-      callback: () => new Notice("F9 MCP says hello"),
+      callback: () => new Notice("Lore MCP says hello"),
     });
 
     this.addSettingTab(new F9LoreMCPSettingTab(this.app, this));
@@ -255,7 +255,7 @@ export default class F9LoreMCPPlugin extends Plugin {
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         this.lastMcpError = message;
-        new Notice(`MCP Server Error: ${message}`);
+        new Notice(`MCP server error: ${message}`);
       }
     } else {
       this.lastMcpError = null; // Clear error when disabled
@@ -410,23 +410,21 @@ class F9LoreMCPSettingTab extends PluginSettingTab {
     const openAccordion = this.plugin.pendingAccordion;
     this.plugin.pendingAccordion = null;
 
-    new Setting(containerEl).setName("F9 Lore MCP settings").setHeading();
-
     // Status section at the top
     this.renderStatusSection(containerEl);
 
-    // MCP Settings accordion
-    this.renderAccordion(containerEl, "MCP Server Settings", openAccordion === "mcp", (content) => {
+    // MCP server accordion
+    this.renderAccordion(containerEl, "MCP server", openAccordion === "mcp", (content) => {
       this.renderMcpSettings(content);
     });
 
-    // Claude Desktop Configuration accordion
-    this.renderAccordion(containerEl, "Claude Desktop Configuration", false, (content) => {
+    // Claude desktop configuration accordion
+    this.renderAccordion(containerEl, "Claude desktop configuration", false, (content) => {
       this.renderClaudeDesktopConfig(content);
     });
 
-    // Vector Search Settings accordion
-    this.renderAccordion(containerEl, "Vector Search Settings", openAccordion === "vector", (content) => {
+    // Vector search accordion
+    this.renderAccordion(containerEl, "Vector search", openAccordion === "vector", (content) => {
       this.renderVectorSearchSettings(content);
     });
 
@@ -445,7 +443,7 @@ class F9LoreMCPSettingTab extends PluginSettingTab {
     // MCP Connection
     new Setting(helpContainer).setName("MCP connection").setHeading();
     helpContainer.createEl("p", {
-      text: "This server uses streamable SSE transport only. If your client requires stdio (as some MCP integrations do), you can bridge the connection using mcp-remote or a similar proxy. The default configuration snippet for Claude Desktop includes mcp-remote already, so it should just work. Once connected, you can instruct Claude to access your vault exclusively through this MCP—giving you a controlled, Obsidian-native channel for AI interaction with your notes.",
+      text: "This server uses streamable SSE transport only. If your client requires stdio (as some MCP integrations do), you can bridge the connection using MCP-remote or a similar proxy. The default configuration snippet for Claude Desktop includes MCP-remote already, so it should just work. Once connected, you can instruct Claude to access your vault exclusively through this MCP—giving you a controlled, obsidian-native channel for ai interaction with your notes.",
       cls: "f9-help-text",
     });
 
@@ -460,8 +458,8 @@ class F9LoreMCPSettingTab extends PluginSettingTab {
       cls: "f9-help-text",
     });
 
-    // Search: Embeddings
-    new Setting(helpContainer).setName("Search: Embeddings (Ollama / OpenAI)").setHeading();
+    // Search: embeddings
+    new Setting(helpContainer).setName("Search: embeddings (Ollama / OpenAI)").setHeading();
     helpContainer.createEl("p", {
       text: "Embedding-based search understands language, not just keywords. It can find conceptually related notes even when the wording differs. The trade-off is cost (for OpenAI) or local compute (for Ollama). Use this if your vault is large, loosely organized, or if you frequently search for ideas rather than specific terms.",
       cls: "f9-help-text",
@@ -576,7 +574,7 @@ class F9LoreMCPSettingTab extends PluginSettingTab {
   private renderMcpSettings(containerEl: HTMLElement): void {
     new Setting(containerEl)
       .setName("Enable MCP server")
-      .setDesc("Host an MCP server inside Obsidian on 127.0.0.1")
+      .setDesc("Host an MCP server inside obsidian on 127.0.0.1")
       .addToggle((toggle) =>
         toggle
           .setValue(this.plugin.settings.mcpEnabled)
@@ -604,7 +602,7 @@ class F9LoreMCPSettingTab extends PluginSettingTab {
       );
 
     new Setting(containerEl)
-      .setName("DNS rebinding protection")
+      .setName("Dns rebinding protection")
       .setDesc("Validate Host header for local requests")
       .addToggle((toggle) =>
         toggle
@@ -632,8 +630,8 @@ class F9LoreMCPSettingTab extends PluginSettingTab {
       );
 
     new Setting(containerEl)
-      .setName("Enable HTTPS")
-      .setDesc("Use HTTPS instead of HTTP. Required for Claude Desktop.")
+      .setName("Enable https")
+      .setDesc("Use https instead of http. Required for Claude Desktop.")
       .addToggle((toggle) =>
         toggle
           .setValue(this.plugin.settings.mcpHttpsEnabled)
@@ -647,11 +645,11 @@ class F9LoreMCPSettingTab extends PluginSettingTab {
     // Only show TLS settings when HTTPS is enabled
     if (this.plugin.settings.mcpHttpsEnabled) {
       new Setting(containerEl)
-        .setName("TLS certificate")
-        .setDesc("Paste the contents of your mkcert certificate (PEM format)")
+        .setName("Tls certificate")
+        .setDesc("Paste the contents of your mkcert certificate (pem format)")
         .addTextArea((text) =>
           text
-            .setPlaceholder("-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----")
+            .setPlaceholder("-----begin certificate-----\n...\n-----end certificate-----")
             .setValue(this.plugin.settings.mcpTlsCert)
             .onChange(async (value) => {
               this.plugin.settings.mcpTlsCert = value;
@@ -666,11 +664,11 @@ class F9LoreMCPSettingTab extends PluginSettingTab {
         });
 
       new Setting(containerEl)
-        .setName("TLS private key")
-        .setDesc("Paste the contents of your mkcert private key (PEM format)")
+        .setName("Tls private key")
+        .setDesc("Paste the contents of your mkcert private key (pem format)")
         .addTextArea((text) =>
           text
-            .setPlaceholder("-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----")
+            .setPlaceholder("-----begin private key-----\n...\n-----end private key-----")
             .setValue(this.plugin.settings.mcpTlsKey)
             .onChange(async (value) => {
               this.plugin.settings.mcpTlsKey = value;
@@ -873,7 +871,7 @@ class F9LoreMCPSettingTab extends PluginSettingTab {
     if (provider === "ollama") {
       new Notice("Cannot connect to Ollama. Is it running?");
     } else if (provider === "openai") {
-      new Notice("Cannot connect to OpenAI. Check your API key.");
+      new Notice("Cannot connect to OpenAI. Check your api key.");
     }
     // TF-IDF is always available, so no error message needed
   }
@@ -910,11 +908,11 @@ class F9LoreMCPSettingTab extends PluginSettingTab {
    */
   private renderOllamaSettings(containerEl: HTMLElement): void {
     new Setting(containerEl)
-      .setName("Ollama URL")
-      .setDesc("URL of your Ollama instance")
+      .setName("Ollama url")
+      .setDesc("Url of your Ollama instance")
       .addText((text) =>
         text
-          .setPlaceholder("http://localhost:11434")
+          .setPlaceholder("Http://localhost:11434")
           .setValue(this.plugin.settings.vectorSearch.ollamaUrl)
           .onChange(async (value) => {
             this.plugin.settings.vectorSearch.ollamaUrl = value;
@@ -928,7 +926,7 @@ class F9LoreMCPSettingTab extends PluginSettingTab {
       .setDesc("Ollama model for generating embeddings")
       .addText((text) =>
         text
-          .setPlaceholder("nomic-embed-text:latest")
+          .setPlaceholder("Nomic-embed-text:latest")
           .setValue(this.plugin.settings.vectorSearch.embeddingModel)
           .onChange(async (value) => {
             this.plugin.settings.vectorSearch.embeddingModel = value;
@@ -943,11 +941,11 @@ class F9LoreMCPSettingTab extends PluginSettingTab {
    */
   private renderOpenAISettings(containerEl: HTMLElement): void {
     new Setting(containerEl)
-      .setName("OpenAI API key")
-      .setDesc("Your OpenAI API key (stored locally)")
+      .setName("OpenAI api key")
+      .setDesc("Your OpenAI api key (stored locally)")
       .addText((text) => {
         text
-          .setPlaceholder("sk-...")
+          .setPlaceholder("Sk-...")
           .setValue(this.plugin.settings.vectorSearch.openaiApiKey)
           .onChange(async (value) => {
             this.plugin.settings.vectorSearch.openaiApiKey = value;
@@ -972,9 +970,9 @@ class F9LoreMCPSettingTab extends PluginSettingTab {
       .setName("Embedding model")
       .setDesc("OpenAI embedding model to use")
       .addDropdown((dropdown) => {
-        dropdown.addOption("text-embedding-3-small", "text-embedding-3-small (1536 dim, cheapest)");
-        dropdown.addOption("text-embedding-3-large", "text-embedding-3-large (3072 dim, best)");
-        dropdown.addOption("text-embedding-ada-002", "text-embedding-ada-002 (1536 dim, legacy)");
+        dropdown.addOption("text-embedding-3-small", "Text-embedding-3-small (1536 dim, cheapest)");
+        dropdown.addOption("text-embedding-3-large", "Text-embedding-3-large (3072 dim, best)");
+        dropdown.addOption("text-embedding-ada-002", "Text-embedding-ada-002 (1536 dim, legacy)");
         dropdown.addOption("custom", "Custom model...");
         dropdown.setValue(isCustomModel ? "custom" : currentModel);
         dropdown.onChange(async (value) => {
@@ -994,7 +992,7 @@ class F9LoreMCPSettingTab extends PluginSettingTab {
         .setDesc("Enter the model identifier")
         .addText((text) =>
           text
-            .setPlaceholder("text-embedding-3-small")
+            .setPlaceholder("Text-embedding-3-small")
             .setValue(isCustomModel ? currentModel : "")
             .onChange(async (value) => {
               if (value) {
@@ -1008,7 +1006,7 @@ class F9LoreMCPSettingTab extends PluginSettingTab {
 
     // Optional custom API endpoint
     new Setting(containerEl)
-      .setName("Custom API endpoint (optional)")
+      .setName("Custom api endpoint (optional)")
       .setDesc("For Azure OpenAI or compatible APIs. Leave empty for standard OpenAI.")
       .addText((text) =>
         text
@@ -1096,14 +1094,14 @@ class F9LoreMCPSettingTab extends PluginSettingTab {
     const configJson = this.generateClaudeDesktopConfig();
 
     new Setting(containerEl)
-      .setName("claude_desktop_config.json snippet")
+      .setName("Claude_desktop_config.json snippet")
       .setDesc("Add this to your Claude Desktop config file under \"mcpServers\"")
       .addButton((btn) =>
         btn
           .setButtonText("Copy")
           .setCta()
           .onClick(() => {
-            navigator.clipboard.writeText(configJson);
+            void navigator.clipboard.writeText(configJson);
             new Notice("Configuration copied to clipboard");
           })
       );

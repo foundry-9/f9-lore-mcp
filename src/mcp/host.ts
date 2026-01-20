@@ -211,8 +211,8 @@ export class LoreMcpHost {
       }
     }
 
-    // Request handler shared by HTTP and HTTPS
-    const requestHandler = async (req: IncomingMessage, res: ServerResponse) => {
+    // Async request handler - errors are caught and returned as 500 responses
+    const handleRequestAsync = async (req: IncomingMessage, res: ServerResponse) => {
       try {
         const url = req.url || "/";
         if (url === "/mcp") {
@@ -223,19 +223,11 @@ export class LoreMcpHost {
             // Route to existing session
             const session = this.sessions.get(sessionId)!;
             session.lastActivity = Date.now(); // Update activity timestamp
-            try {
-              await session.transport.handleRequest(req, res);
-            } catch (transportErr) {
-              throw transportErr;
-            }
+            await session.transport.handleRequest(req, res);
           } else if (req.method === "POST") {
             // Create new session for POST without valid session ID
             const { session } = await this.createSession(req);
-            try {
-              await session.transport.handleRequest(req, res);
-            } catch (transportErr) {
-              throw transportErr;
-            }
+            await session.transport.handleRequest(req, res);
           } else if (req.method === "DELETE" && sessionId) {
             // Handle session termination
             await this.closeSession(sessionId);
@@ -276,6 +268,11 @@ export class LoreMcpHost {
         res.writeHead(500, { "content-type": "application/json" });
         res.end(JSON.stringify({ error: message }));
       }
+    };
+
+    // Wrap async handler for Node's http.createServer (which doesn't await returned promises)
+    const requestHandler = (req: IncomingMessage, res: ServerResponse): void => {
+      void handleRequestAsync(req, res);
     };
 
     // Create HTTP or HTTPS server based on configuration

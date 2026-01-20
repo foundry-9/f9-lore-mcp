@@ -85,8 +85,15 @@ export function createFreshnessToken(content: string, mtime: number): string {
 export function parseFreshnessToken(token: string): FreshnessToken | null {
   try {
     const decoded = atob(token);
-    const parsed = JSON.parse(decoded);
-    if (typeof parsed.mtime === "number" && typeof parsed.hash === "string") {
+    const parsed: unknown = JSON.parse(decoded);
+    if (
+      typeof parsed === "object" &&
+      parsed !== null &&
+      "mtime" in parsed &&
+      "hash" in parsed &&
+      typeof (parsed as FreshnessToken).mtime === "number" &&
+      typeof (parsed as FreshnessToken).hash === "string"
+    ) {
       return parsed as FreshnessToken;
     }
     return null;

@@ -1,6 +1,6 @@
 {
   "name": "f9-lore-mcp",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "description": "Host an MCP server to expose vault operations via HTTP/SSE endpoints.",
   "keywords": [
     "obsidian",
@@ -18,10 +18,15 @@
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.2",
     "@types/node": "^20.12.7",
     "esbuild": "^0.27.2",
+    "eslint": "^9.39.2",
+    "eslint-plugin-obsidianmd": "^0.1.9",
+    "globals": "^17.0.0",
     "obsidian": "latest",
     "typescript": "^5.4.5",
+    "typescript-eslint": "^8.53.1",
     "zod": "^4.3.5"
   },
   "engines": {

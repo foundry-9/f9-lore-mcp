@@ -2,7 +2,7 @@
  * Text search tools: grep, str_replace
  */
 
-import type { App, TFile } from "obsidian";
+import type { App } from "obsidian";
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import {

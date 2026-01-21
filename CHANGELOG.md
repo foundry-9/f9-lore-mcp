@@ -2,6 +2,34 @@
 
 ## [Unreleased]
 
+## [1.2.4]
+
+### Added
+
+- **TF-IDF auto-rebuild setting** to automatically rebuild the index when vocabulary drift is detected
+  - New toggle in TF-IDF settings: "Auto-rebuild on vocabulary changes" (default: on)
+  - When enabled, triggers a full reindex 10 seconds after any file change that introduces new vocabulary terms
+  - Eliminates vocabulary drift warnings by keeping the index up-to-date with new terminology
+  - Can be disabled if the automatic rebuilds become onerous for large vaults
+
+### Changed
+
+- Updated CLAUDE.md to document ESLint requirement and `allowUiSpecialWords()` usage for sentence-case compliance
+
+## [1.2.3]
+
+### Changed
+
+- **Runtime sentence-case handling for UI text** replaces ESLint rule configuration
+  - Added `allowUiSpecialWords()` function to preserve acronyms (MCP, SSE, TF-IDF, URL, API, HTTPS, TLS, DNS) and brand names (Ollama, OpenAI, Claude Desktop, etc.) while applying sentence case to other text
+  - Removed ESLint `obsidianmd/ui/sentence-case` rule configuration from `eslint.config.mjs` (caused issues with dynamic text)
+  - All setting names, descriptions, notices, and help text now use this function for consistent casing
+- Moved `release.sh` to `scripts/release.sh`
+
+### Added
+
+- **GitHub Actions release workflow** (`.github/workflows/release.yml`) for automated releases
+
 ## [1.2.2]
 
 ### Changed

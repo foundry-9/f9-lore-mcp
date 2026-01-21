@@ -94,6 +94,8 @@ export class VectorIndexer {
   private saveDebounceTimer?: ReturnType<typeof setTimeout>;
   /** Track if there are unsaved changes that need to be persisted */
   private hasPendingSave = false;
+  /** Debounce timer for TF-IDF auto-rebuild on vocabulary drift */
+  private tfidfRebuildTimer?: ReturnType<typeof setTimeout>;
   /** Current file being indexed (for progress display) */
   private currentFile: string | null = null;
   /** Progress of current bulk indexing operation */
@@ -298,6 +300,40 @@ export class VectorIndexer {
         });
       }
     }, 2000);
+  }
+
+  /**
+   * Schedule a TF-IDF auto-rebuild if vocabulary drift is detected.
+   * Uses a 10 second debounce to batch multiple file changes.
+   */
+  private scheduleTfidfRebuildIfNeeded(): void {
+    // Only applies to TF-IDF provider with auto-rebuild enabled
+    if (!(this.provider instanceof TfidfClient)) {
+      return;
+    }
+    if (!this.settings.tfidfAutoRebuild) {
+      return;
+    }
+
+    // Check if there are unknown terms (vocabulary drift)
+    const drift = this.provider.getVocabularyDriftStats();
+    if (drift.unknownTermsCount === 0) {
+      return;
+    }
+
+    // Clear any existing timer
+    if (this.tfidfRebuildTimer) {
+      clearTimeout(this.tfidfRebuildTimer);
+    }
+
+    // Schedule rebuild after 10 seconds of inactivity
+    this.tfidfRebuildTimer = setTimeout(() => {
+      this.tfidfRebuildTimer = undefined;
+      // Double-check we're still using TF-IDF and auto-rebuild is enabled
+      if (this.provider instanceof TfidfClient && this.settings.tfidfAutoRebuild) {
+        void this.reindexVault();
+      }
+    }, 10000);
   }
 
   /**
@@ -634,6 +670,8 @@ export class VectorIndexer {
 
       await this.indexFile(file);
       await this.saveIndex();
+      // Check if TF-IDF vocabulary drift requires a rebuild
+      this.scheduleTfidfRebuildIfNeeded();
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       this.lastError = {

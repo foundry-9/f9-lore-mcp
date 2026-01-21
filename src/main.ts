@@ -1046,7 +1046,7 @@ class F9LoreMCPSettingTab extends PluginSettingTab {
   }
 
   /**
-   * Render TF-IDF-specific settings (informational only).
+   * Render TF-IDF-specific settings.
    */
   private renderTfidfSettings(containerEl: HTMLElement): void {
     new Setting(containerEl)
@@ -1056,6 +1056,23 @@ class F9LoreMCPSettingTab extends PluginSettingTab {
           "It works fully offline with no external services required. " +
           "Search quality is based on keyword matching rather than semantic understanding. " +
           "Indexing is instant since no embeddings are computed."
+      );
+
+    new Setting(containerEl)
+      .setName(allowUiSpecialWords("Auto-rebuild on vocabulary changes"))
+      .setDesc(
+        allowUiSpecialWords(
+          "Automatically rebuild the entire index when new terms are detected. " +
+          "This improves search quality but triggers a full reindex after each file change that adds new vocabulary."
+        )
+      )
+      .addToggle((toggle) =>
+        toggle
+          .setValue(this.plugin.settings.vectorSearch.tfidfAutoRebuild)
+          .onChange(async (value) => {
+            this.plugin.settings.vectorSearch.tfidfAutoRebuild = value;
+            await this.plugin.saveSettings();
+          })
       );
   }
 

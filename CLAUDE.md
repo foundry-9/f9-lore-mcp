@@ -9,6 +9,11 @@ F9 Lore MCP is an Obsidian plugin that hosts a Model Context Protocol (MCP) serv
 ## Workflow
 
 - Always update `CHANGELOG.md` when making changes to the codebase
+- Code must pass ESLint before committing: `npx eslint src`
+  - Includes `eslint-plugin-obsidianmd` rules for Obsidian plugin compliance
+  - For sentence-case issues in UI text, wrap the string with `allowUiSpecialWords()` from `src/main.ts`
+  - Only use `allowUiSpecialWords()` where ESLint flags the text as a problem
+  - If new acronyms, brands, or special words need to be preserved, add them to the arrays in `allowUiSpecialWords()`
 
 ## Build Commands
 

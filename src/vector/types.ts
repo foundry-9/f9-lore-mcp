@@ -82,6 +82,10 @@ export interface VectorSearchSettings {
   chunkOverlap: number;
   /** Per-file debounce delay in ms - file must be quiescent for this duration before indexing */
   debounceMs: number;
+
+  // TF-IDF settings
+  /** Auto-rebuild entire index when vocabulary drift is detected (TF-IDF only) */
+  tfidfAutoRebuild: boolean;
 }
 
 /** Default vector search settings */
@@ -96,6 +100,7 @@ export const DEFAULT_VECTOR_SETTINGS: VectorSearchSettings = {
   chunkSize: 2000,
   chunkOverlap: 200,
   debounceMs: 10000,
+  tfidfAutoRebuild: true,
 };
 
 /** Search result with score */

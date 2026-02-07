@@ -240,6 +240,7 @@ export interface PerformEditResult {
   error?: string;
   errorCode?: string;
   currentToken?: string;
+  structure?: unknown; // NoteStructure from structure.ts
 }
 
 /**
@@ -265,19 +266,26 @@ export function editResultToToolResponse(
     };
   }
 
+  const responseData: Record<string, unknown> = {
+    success: true,
+    freshnessToken: result.freshnessToken,
+    verified: result.verified,
+    ...extraFields,
+  };
+
+  if (result.structure) {
+    responseData.structure = result.structure;
+  }
+
   return {
     content: [
       {
         type: "text",
-        text: JSON.stringify({
-          success: true,
-          freshnessToken: result.freshnessToken,
-          verified: result.verified,
-          ...extraFields,
-        }),
+        text: JSON.stringify(responseData),
       },
     ],
   };
+
 }
 
 // ============================================================================

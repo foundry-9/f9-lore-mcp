@@ -14,6 +14,7 @@ import {
 import {
   createFreshnessToken,
   verifyFreshness,
+  buildNoteStructure,
 } from "../structure";
 import {
   updateSectionContent,
@@ -92,11 +93,21 @@ async function performEdit(
   // Generate new token
   const updatedContent = await app.vault.read(file);
   const newToken = createFreshnessToken(updatedContent, file.stat.mtime);
+  const updatedCache = app.metadataCache.getFileCache(file);
+
+  // Build and return the updated structure
+  const structure = buildNoteStructure(
+    file.path,
+    updatedContent,
+    updatedCache,
+    file.stat.mtime
+  );
 
   return {
     success: true,
     freshnessToken: newToken,
     verified: verify,
+    structure,
   };
 }
 
@@ -297,6 +308,11 @@ export function registerStructureWriteTools(mcp: McpServer, ctx: StructureWriteC
         const updatedContent = await app.vault.read(file);
         editResult.freshnessToken = createFreshnessToken(updatedContent, file.stat.mtime);
         editResult.verified = true;
+        // Build structure for the final state
+        const updatedCache = app.metadataCache.getFileCache(file);
+        if (updatedCache) {
+          editResult.structure = buildNoteStructure(file.path, updatedContent, updatedCache, file.stat.mtime);
+        }
       }
 
       return editResultToToolResponse(editResult);
